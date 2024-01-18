@@ -98,7 +98,7 @@ Display the number of lines in each data file using a similar loop. (Hint: combi
 #| eval: false
 for datafile in ~/mimic/hosp/{a,l,pa}*.gz
 do
-  zcat $datafile | wc -l
+  zcat <$datafile | wc -l
 done
 ```
 
@@ -106,24 +106,59 @@ done
 
 ```{bash}
 # Display the first few lines of admissions.csv.gz
-zcat ~/mimic/hosp/admissions.csv.gz | head
+zcat <~/mimic/hosp/admissions.csv.gz | head
 ```
 ```{bash}
 # Count the number of rows in admissions.csv.gz
-zcat ~/mimic/hosp/admissions.csv.gz | wc -l
+zcat <~/mimic/hosp/admissions.csv.gz | wc -l
 ```
 ```{bash}
 # Count the number of unique patients in admissions.csv.gz
-zcat ~/mimic/hosp/admissions.csv.gz | awk -F, '{print $2}' | sort | uniq | wc -l
+zcat <~/mimic/hosp/admissions.csv.gz | awk -F, '{print $1}' | sort | uniq | wc -l
 ```
 ```{bash}
 # Count the number of patients in patients.csv.gz
-zcat ~/mimic/hosp/patients.csv.gz | wc -l
+zcat <~/mimic/hosp/patients.csv.gz | wc -l
 ```
+The mumber of unique patients in admissions.csc.gz does not match the number of patients listed in the `patients.csv.gz` file.
 
 6. What are the possible values taken by each of the variable `admission_type`, `admission_location`, `insurance`, and `ethnicity`? Also report the count for each unique value of these variables. (Hint: combine Linux commands `zcat`, `head`/`tail`, `awk`, `uniq -c`, `wc`, and so on; skip the header line.)
 
+```{bash}
+# possible values and counts taken by admission_type
+zcat <~/mimic/hosp/admissions.csv.gz | tail -n +2 | awk -F',' '{print $6}' | sort | uniq -c
+```
+
+```{bash}
+# possible values and counts taken by admission_location
+zcat <~/mimic/hosp/admissions.csv.gz | tail -n +2 | awk -F',' '{print $8}' | sort | uniq -c
+```
+```{bash}
+# possible values and counts taken by insurance
+zcat <~/mimic/hosp/admissions.csv.gz | tail -n +2 | awk -F',' '{print $10}' | sort | uniq -c
+```
+
+```{bash}
+# possible values and counts taken by race
+zcat <~/mimic/hosp/admissions.csv.gz | tail -n +2 | awk -F',' '{print $13}' | sort | uniq -c
+```
+
 7. _To compress, or not to compress. That's the question._ Let's focus on the big data file `labevents.csv.gz`. Compare compressed gz file size to the uncompressed file size. Compare the run times of `zcat < ~/mimic/labevents.csv.gz | wc -l` versus `wc -l labevents.csv`. Discuss the trade off between storage and speed for big data files. (Hint: `gzip -dk < FILENAME.gz > ./FILENAME`. Remember to delete the large `labevents.csv` file after the exercise.)
+
+**Answer:** The compressed gz file size is 1.9G. The uncompressed file size is 13G. The run time of `zcat < ~/mimic/labevents.csv.gz | wc -l` is 1.5s. The run time of `wc -l labevents.csv` is 1.4s. The trade off between storage and speed for big data files is that the compressed gz file takes less space but takes more time to run. The uncompressed file takes more space but takes less time to run.
+```{bash}
+# Display the sizes of the compressed and uncompressed files
+ls -lh ~/mimic/hosp/labevents.csv.gz
+gzip -dkc ~/mimic/hosp/labevents.csv.gz > ~/mimic/labevents_uncompressed.csv
+ls -lh ~/mimic/labevents_uncompressed.csv
+```
+```{bash}
+# Run time for compressed file
+time zcat < ~/mimic/hosp/labevents.csv.gz | wc -l
+
+# Run time for uncompressed file
+time wc -l ~/mimic/labevents_uncompressed.csv
+```
 
 ## Q4. Who's popular in Price and Prejudice
 
@@ -171,6 +206,29 @@ Explain the output. Explain the meaning of `"$1"`, `"$2"`, and `"$3"` in this sh
 ## Q5. More fun with Linux
 
 Try following commands in Bash and interpret the results: `cal`, `cal 2024`, `cal 9 1752` (anything unusual?), `date`, `hostname`, `arch`, `uname -a`, `uptime`, `who am i`, `who`, `w`, `id`, `last | head`, `echo {con,pre}{sent,fer}{s,ed}`, `time sleep 5`, `history | tail`.
+
+**Answer**
+```{bash}
+cal
+```
+```{bash}
+cal 2024
+```
+
+```{bash}
+cal 9 1752
+```
+
+```{bash}
+date
+```
+
+```{bash}
+```
+
+```{bash}
+history | tail
+```
 
 ## Q6. Book
 
