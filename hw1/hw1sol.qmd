@@ -24,7 +24,6 @@ knitr:
 Display machine information for reproducibility:
 
 ```{r}
-#| eval: false
 sessionInfo()
 ```
 
@@ -78,21 +77,21 @@ This is content of the `icu` folder:
 ls -l ~/mimic/icu/
 ```
 
-The data files are distributed as `.csv.gz` files instead of `.csv` files because the `.csv.gz` files are compressed, take less space, and use less internet bandwidth.
+The data files are distributed as `.csv.gz` files instead of `.csv` files because the `.csv.gz` files are compressed, take less space, and use less internet bandwidth. The `.csv.gz` files are compressed using gzip. The `.csv.gz` files can be decompressed using gzip.
+
 
 3.  Briefly describe what Bash commands `zcat`, `zless`, `zmore`, and `zgrep` do.
 
 **Answer:**\
 1). `zcat` is used to display the contents of a compressed file.\
 2). `zless` allows to view the contents of compressed files page by page.\
-3). `zgrep` is used to search for a pattern in compressed files. It works similarly to grep but on gzip-compressed files.\
-4). `zmore` displays the contents of compressed files one screen at a time (screen by screen).\
-5). `zgrep` is used to search for a pattern in compressed files.
+3). `zmore` displays the contents of compressed files one screen at a time (screen by screen).\
+4). `zgrep` is used to search for a pattern in compressed files. It works similarly to grep but on gzip-compressed files.
 
 4.  (Looping in Bash) What's the output of the following bash script?
 
 ```{bash}
-#| eval: false
+#| eval: true
 for datafile in ~/mimic/hosp/{a,l,pa}*.gz
 do
   ls -l $datafile
@@ -102,7 +101,7 @@ done
 Display the number of lines in each data file using a similar loop. (Hint: combine linux commands `zcat <` and `wc -l`.)
 
 ```{bash}
-#| eval: false
+#| eval: true
 for datafile in ~/mimic/hosp/{a,l,pa}*.gz
 do
   zcat <$datafile | wc -l
@@ -120,21 +119,22 @@ zcat <~/mimic/hosp/admissions.csv.gz | head
 # Count the number of rows in admissions.csv.gz
 zcat <~/mimic/hosp/admissions.csv.gz | wc -l
 ```
+The number of rows in the admissions.csv.gz file is 431,232.
 
 ```{bash}
 # Count the number of unique patients in admissions.csv.gz
-zcat <~/mimic/hosp/admissions.csv.gz | awk -F, '{print $1}' | sort | uniq | wc -l
+zcat <~/mimic/hosp/admissions.csv.gz | tail -n +2 |awk -F, '{print $1}' | sort | uniq | wc -l
 ```
 
 ```{bash}
-# Count the number of patients in patients.csv.gz
-zcat <~/mimic/hosp/patients.csv.gz | wc -l
+# Count the number of unique patients in patients.csv.gz
+zcat <~/mimic/hosp/patients.csv.gz | tail -n +2 |awk -F, '{print $1}' | sort | uniq | wc -l
 ```
-
 The mumber of unique patients in admissions.csc.gz does not match the number of patients listed in the `patients.csv.gz` file.
 
 6.  What are the possible values taken by each of the variable `admission_type`, `admission_location`, `insurance`, and `ethnicity`? Also report the count for each unique value of these variables. (Hint: combine Linux commands `zcat`, `head`/`tail`, `awk`, `uniq -c`, `wc`, and so on; skip the header line.)
 
+**Answer:** The possible values taken by each of the variable `admission_type`, `admission_location`, `insurance`, and `ethnicity` are shown below.
 ```{bash}
 # possible values and counts taken by admission_type
 zcat <~/mimic/hosp/admissions.csv.gz | tail -n +2 | awk -F',' '{print $6}' | sort | uniq -c
@@ -194,7 +194,7 @@ Explain what `wget -nc` does. Do **not** put this text file `pg42671.txt` in Git
 Complete the following loop to tabulate the number of times each of the four characters is mentioned using Linux commands.
 
 ```{bash}
-#| eval: false
+#| eval: true
 for char in Elizabeth Jane Lydia Darcy
 do
   echo $char:
@@ -232,7 +232,6 @@ head -n "$2" "$1" | tail -n "$3"
 Using `chmod` to make the file executable by the owner, and run
 
 ```{bash}
-#| eval: false
 chmod u+x middle.sh
 ./middle.sh pg42671.txt 20 5
 ```
@@ -243,7 +242,7 @@ Explain the output. Explain the meaning of `"$1"`, `"$2"`, and `"$3"` in this sh
 
 -   The output is the 5 lines from line 16 to line 20 of the file `pg42671.txt`.
 
--   `"$1"` is the first argument, `"$2"` is the second argument, and `"$3"` is the third argument, which means `"$1"`= pg42671.txt, `"$2"`= 20, and `"$3"`=5.
+-   `"$1"` is the first argument, `"$2"` is the second argument, and `"$3"` is the third argument, which means `"$1"`= `pg42671.txt`, `"$2"`= 20, and `"$3"`=5.
 
 -   We need the first line of the shell script to tell the computer that this is a shell script. It also identifies the shell (bash,sh,csh, etc).
 
@@ -287,7 +286,7 @@ hostname
 arch
 ```
 
-`arch` shows the architecture of the computer.
+`arch` display the machine architecture (hardware platform) for which the current version of the operating system is compiled.
 
 ```{bash}
 uname -a
@@ -335,7 +334,7 @@ last | head
 echo {con,pre}{sent,fer}{s,ed}
 ```
 
-`echo {con,pre}{sent,fer}{s,ed}` shows the words that can be combined by the words `con` and `pre` with the words `sent` and `fer` with the words `s` and `ed`. The words that can be formed are `consents`, `conferred`, `presents`, `preferred`, `confered`, `conferes`, `confered`, `confered`, `presed`
+`echo {con,pre}{sent,fer}{s,ed}` shows the words that can be combined by the words `con` and `pre` with the words `sent` and `fer` with the words `s` and `ed`. 
 
 ```{bash}
 time sleep 5
