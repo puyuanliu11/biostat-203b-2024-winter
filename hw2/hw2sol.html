@@ -3115,7 +3115,7 @@ loaded via a namespace (and not attached):
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>memuse<span class="sc">::</span><span class="fu">Sys.meminfo</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Totalram:  7.625 GiB 
-Freeram:   5.583 GiB </code></pre>
+Freeram:   5.587 GiB </code></pre>
 </div>
 </div>
 <p>In this exercise, we explore various tools for ingesting the <a href="https://mimic.mit.edu/docs/iv/">MIMIC-IV</a> data introduced in <a href="https://ucla-biostat-203b.github.io/2024winter/hw/hw1/hw1.html">homework 1</a>.</p>
@@ -3174,17 +3174,17 @@ Freeram:   5.583 GiB </code></pre>
 <div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(df1 <span class="ot">&lt;-</span> <span class="fu">read.csv</span>(<span class="st">&quot;~/mimic/hosp/admissions.csv.gz&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
-  5.319   0.125   6.427 </code></pre>
+  4.098   0.122   5.137 </code></pre>
 </div>
 <div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(df2 <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;~/mimic/hosp/admissions.csv.gz&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
-  1.122   0.295   1.543 </code></pre>
+  0.858   0.096   0.988 </code></pre>
 </div>
 <div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(df3 <span class="ot">&lt;-</span> <span class="fu">fread</span>(<span class="st">&quot;~/mimic/hosp/admissions.csv.gz&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
-  1.948   0.109   1.225 </code></pre>
+  1.442   0.101   1.001 </code></pre>
 </div>
 </div>
 <p>The fread function is the fastest.</p>
@@ -3309,7 +3309,7 @@ Freeram:   5.583 GiB </code></pre>
 <span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">race =</span> <span class="fu">col_factor</span>())))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
-  0.661   0.214   0.948 </code></pre>
+  0.643   0.099   0.742 </code></pre>
 </div>
 </div>
 <p>The run time is a little bit faster than the default <code>read_csv</code> function.</p>
@@ -3405,7 +3405,7 @@ Freeram:   5.583 GiB </code></pre>
 <div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>(lab3 <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;labevents_filtered.csv.gz&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
- 26.572   2.777   8.530 </code></pre>
+ 25.472   1.604   7.262 </code></pre>
 </div>
 </div>
 <p>The <code>labevents_filtered.csv.gz</code> file has 24855909 lines. The <code>read_csv</code> function took 7.984 seconds to ingest the file.</p>
@@ -3432,7 +3432,7 @@ Freeram:   5.583 GiB </code></pre>
 <span id="cb46-5"><a href="#cb46-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">collect</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
- 23.036   5.930  21.737 </code></pre>
+ 23.936   4.506  22.205 </code></pre>
 </div>
 </div>
 <p>It takes 24.213 seconds to ingest, select, and filter the <code>labevents.csv</code> file.</p>
@@ -3490,7 +3490,7 @@ Freeram:   5.583 GiB </code></pre>
 <span id="cb57-4"><a href="#cb57-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">collect</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
- 11.981   5.628   4.588 </code></pre>
+ 12.815   5.143   4.478 </code></pre>
 </div>
 </div>
 <div class="cell" data-layout-align="center">
@@ -3539,7 +3539,7 @@ Freeram:   5.583 GiB </code></pre>
 <span id="cb63-5"><a href="#cb63-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">collect</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>   user  system elapsed 
- 14.179   4.966   4.719 </code></pre>
+ 20.118   6.769   5.675 </code></pre>
 </div>
 </div>
 <div class="cell" data-layout-align="center">
@@ -3610,35 +3610,14 @@ Freeram:   5.583 GiB </code></pre>
 <p>In later exercises, we are interested in the vitals for ICU patients: heart rate (220045), mean non-invasive blood pressure (220181), systolic non-invasive blood pressure (220179), body temperature in Fahrenheit (223761), and respiratory rate (220210). Retrieve a subset of <code>chartevents.csv.gz</code> only containing these items, using the favorite method you learnt in Q2.</p>
 <p>Document the steps and show code. Display the number of rows and the first 10 rows of the result tibble.</p>
 <ul>
-<li>Decompress <code>chartevents.csv.gz</code> to <code>chartevents.csv</code>: <!-- ```{bash} --> <!-- #| eval: false --> <!-- gzip -dk < ~/mimic/icu/chartevents.csv.gz > ~/chartevents.csv --> <!-- ``` --></li>
+<li>Extract these columns <code>subject_id</code>, <code>itemid</code>, <code>charttime</code>, <code>valuenum</code> and rows in the vitals for ICU patients from <code>chartevents.csv.gz</code> and save the result to a new file <code>chartevents_filtered.csv.gz</code> in the current working directory.</li>
 </ul>
-<!-- - Open and rewrite the csv file `chartevents.csv` in the binary Parquet format: -->
-<!-- ```{r eval=FALSE} -->
-<!-- chart_csv <- arrow::open_dataset("~/chartevents.csv", format = 'csv') -->
-<!-- arrow::write_dataset(chart_csv, "chartevents.parquet") -->
-<!-- ``` -->
-<!-- - Compare the file sizes of `chartevents.csv` and `chartevents.parquet`: -->
-<!-- ```{r} -->
-<!-- #file.size("~/chartevents.csv") -->
-<!-- #file.size("chartevents.parquet/part-0.parquet") -->
-<!-- ``` -->
-<!-- - Ingest and filter `chartevents.csv` by Apache Arrow, and show the running time. -->
-<!-- ```{r} -->
-<!-- system.time(chart_parquet <- arrow::open_dataset("chartevents.parquet/part-0.parquet", format = "parquet") %>%  -->
-<!--   dplyr::select(subject_id, itemid, charttime, valuenum) %>%  -->
-<!--   dplyr::filter(itemid %in% c(220045, 220181, 220179, 223761, 220210)) %>%  -->
-<!--   collect()) -->
-<!-- ``` -->
-<!-- - Display the number of rows and the first 10 rows of the result tibble. -->
-<!-- ```{r} -->
-<!-- nrow(chart_parquet) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- head(chart_parquet, 10) -->
-<!-- ``` -->
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb73"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb73-1"><a href="#cb73-1" aria-hidden="true" tabindex="-1"></a><span class="fu">zcat</span> <span class="op">&lt;</span> ~/mimic/icu/chartevents.csv.gz <span class="kw">|</span> <span class="fu">awk</span> <span class="at">-F,</span> <span class="st">&#39;($7 == 220045 || $7 == 220181 || $7 == 220179 || $7 == 223761 || $7 == 220210) {print $1&quot;,&quot;$5&quot;,&quot;$7&quot;,&quot;$9}&#39;</span> <span class="kw">|</span> <span class="fu">gzip</span> <span class="op">&gt;</span> chartevents_filtered.csv.gz</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
+<ul>
+<li>Display the first 10 lines of the new file <code>chartevents_filtered.csv.gz</code>.</li>
+</ul>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb74"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb74-1"><a href="#cb74-1" aria-hidden="true" tabindex="-1"></a><span class="fu">zcat</span> <span class="op">&lt;</span> chartevents_filtered.csv.gz <span class="kw">|</span> <span class="fu">head</span> <span class="at">-10</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
@@ -3654,6 +3633,9 @@ Freeram:   5.583 GiB </code></pre>
 10000032,2180-07-23 19:00:00,220210,16</code></pre>
 </div>
 </div>
+<ul>
+<li>Display the number of rows in the new file <code>chartevents_filtered.csv.gz</code>.</li>
+</ul>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb76"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a><span class="fu">zcat</span> <span class="op">&lt;</span> chartevents_filtered.csv.gz <span class="kw">|</span> <span class="fu">wc</span> <span class="at">-l</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
