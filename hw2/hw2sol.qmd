@@ -203,8 +203,8 @@ gzip -dk < ~/mimic/hosp/labevents.csv.gz > ~/labevents.csv
 ```{r}
 system.time(lab4 <- arrow::open_dataset("~/labevents.csv", format = "csv") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
-  dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
-  #dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
+  #dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
+  dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
   collect())
 ```
 It takes 24.213 seconds to ingest, select, and filter the `labevents.csv` file. 
@@ -228,7 +228,7 @@ Re-write the csv file `labevents.csv` in the binary Parquet format (Hint: [`arro
 
 Write a few sentences to explain what is the Parquet format. Imagine you want to explain it to a layman in an elevator.
 
-```{r}
+```{r eval=FALSE}
 lab_csv <- arrow::open_dataset("~/labevents.csv", format = 'csv')
 arrow::write_dataset(lab_csv, "labevents.parquet")
 ```
@@ -241,7 +241,7 @@ file.size("labevents.parquet/part-0.parquet")
 ```{r}
 system.time(lab_parquet <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
-  dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
+  dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
   collect())
 ```
 ```{r}
@@ -251,7 +251,7 @@ nrow(lab_parquet)
 head(lab_parquet, 10)
 ```
 - The `labevents.csv` file is 13.7 GB, while the `labevents.parquet` file is about 2 GB.
-- It takes 4.6 seconds to ingest, select, and filter the `labevents.parquet` file, which is faster than the `labevents.csv` file.
+- It takes 5 seconds to ingest, select, and filter the `labevents.parquet` file, which is faster than the `labevents.csv` file.
 - The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
 -  Parquet is a storage format that arranges data in columns, making it ideal for efficiently managing large datasets during both read and write processes. Its design excels particularly when queries target specific columns of a table, guaranteeing optimal performance for such operations.
 
@@ -266,12 +266,22 @@ Ingest the Parquet file, convert it to a DuckDB table by     [`arrow::to_duckdb`
 Write a few sentences to explain what is DuckDB. Imagine you want to explain it to a layman in an elevator.
 
 ```{r}
-#lab_duckdb <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
- # dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
-  #dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
-  #arrow::to_duckdb("lab_duckdb")
+system.time(lab_duckdb <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
+  dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
+  dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
+  arrow::to_duckdb() %>%
+  collect())
+```
+```{r}
+nrow(lab_duckdb)
+```
+```{r}
+head(lab_duckdb, 10)
 ```
 
+- It takes 6 seconds to ingest, convert, select, and filter the `labevents.parquet` file to a DuckDB table.
+- The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
+- DuckDB is an embeddable SQL OLAP database management system. It is used as an embedded database, which means it runs as part of the application and does not require a separate server process. It is designed to be fast and efficient for analytical queries, and it is optimized for read-heavy workloads. The system is designed for user-friendly integration with other systems.
 
 ## Q3. Ingest and filter `chartevents.csv.gz`
 
@@ -286,3 +296,51 @@ zcat < ~/mimic/icu/d_items.csv.gz | head -10
 In later exercises, we are interested in the vitals for ICU patients: heart rate (220045), mean non-invasive blood pressure (220181), systolic non-invasive blood pressure (220179), body temperature in Fahrenheit (223761), and respiratory rate (220210). Retrieve a subset of `chartevents.csv.gz` only containing these items, using the favorite method you learnt in Q2. 
 
 Document the steps and show code. Display the number of rows and the first 10 rows of the result tibble.
+
+- Decompress `chartevents.csv.gz` to `chartevents.csv`:
+<!-- ```{bash} -->
+<!-- #| eval: false -->
+<!-- gzip -dk < ~/mimic/icu/chartevents.csv.gz > ~/chartevents.csv -->
+<!-- ``` -->
+
+<!-- - Open and rewrite the csv file `chartevents.csv` in the binary Parquet format: -->
+<!-- ```{r eval=FALSE} -->
+<!-- chart_csv <- arrow::open_dataset("~/chartevents.csv", format = 'csv') -->
+<!-- arrow::write_dataset(chart_csv, "chartevents.parquet") -->
+<!-- ``` -->
+
+<!-- - Compare the file sizes of `chartevents.csv` and `chartevents.parquet`: -->
+<!-- ```{r} -->
+<!-- #file.size("~/chartevents.csv") -->
+<!-- #file.size("chartevents.parquet/part-0.parquet") -->
+<!-- ``` -->
+
+<!-- - Ingest and filter `chartevents.csv` by Apache Arrow, and show the running time. -->
+<!-- ```{r} -->
+<!-- system.time(chart_parquet <- arrow::open_dataset("chartevents.parquet/part-0.parquet", format = "parquet") %>%  -->
+<!--   dplyr::select(subject_id, itemid, charttime, valuenum) %>%  -->
+<!--   dplyr::filter(itemid %in% c(220045, 220181, 220179, 223761, 220210)) %>%  -->
+<!--   collect()) -->
+<!-- ``` -->
+
+<!-- - Display the number of rows and the first 10 rows of the result tibble. -->
+<!-- ```{r} -->
+<!-- nrow(chart_parquet) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- head(chart_parquet, 10) -->
+<!-- ``` -->
+
+
+
+```{bash}
+#| eval: false
+zcat < ~/mimic/icu/chartevents.csv.gz | awk -F, '($7 == 220045 || $7 == 220181 || $7 == 220179 || $7 == 223761 || $7 == 220210) {print $1","$5","$7","$9}' | gzip > chartevents_filtered.csv.gz
+```
+
+```{bash}
+zcat < chartevents_filtered.csv.gz | head -10
+```
+```{bash}
+zcat < chartevents_filtered.csv.gz | wc -l
+```
