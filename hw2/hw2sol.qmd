@@ -68,7 +68,6 @@ system.time(df1 <- read.csv("~/mimic/hosp/admissions.csv.gz"))
 system.time(df2 <- read_csv("~/mimic/hosp/admissions.csv.gz"))
 system.time(df3 <- fread("~/mimic/hosp/admissions.csv.gz"))
 ```
-The fread function is the fastest. 
 
 As for the default parsed data types, we can use the `str` function to display the structure of the data frame or tibble. 
 ```{r}
@@ -80,14 +79,20 @@ str(df2)
 ```{r}
 str(df3)
 ```
-The default data types are different for the 3 methods. For example, the `read_csv` function uses the `numeric` data type for the `subject_id` and `hadm_id` columns, while the `read.csv` and `fread` functions use the `integer` data type for the same columns.
+
 
 ```{r}
 object_size(df1)
 object_size(df2)
 object_size(df3)
 ```
-In terms of memory usage, the resultant dataframe of read.csv uses the most memory (158.71 MB). The resultant tibble of read_csv uses 55.31 MB. The resultant data.table of fread uses the least memory (50.13 MB).
+**Answer:** 
+
+- As for run time, the fread function is the fastest. 
+
+- The default data types are different for the 3 methods. For example, the `read_csv` function uses the `numeric` data type for the `subject_id` and `hadm_id` columns, while the `read.csv` and `fread` functions use the `integer` data type for the same columns.
+
+- In terms of memory usage, the resultant dataframe of read.csv uses the most memory (158.71 MB). The resultant tibble of read_csv uses 55.31 MB. The resultant data.table of fread uses the least memory (50.13 MB).
 
 
 ### Q1.2 User-supplied data types
@@ -106,12 +111,15 @@ system.time(df4 <- read_csv("~/mimic/hosp/admissions.csv.gz",
                                  marital_status = col_factor(),
                                  race = col_factor())))
 ```
-The run time is a little bit faster than the default `read_csv` function. 
 
 ```{r}
 object_size(df4)
 ```
-The resultant tibble of read_csv with user-supplied data types uses 39.79 MB, which is less than the default `read_csv` function.
+**Answer:**
+
+- The run time is a little bit faster than the default `read_csv` function.
+
+- The resultant tibble of read_csv with user-supplied data types uses 39.79 MB, which is less than the default `read_csv` function.
 
 
 
@@ -142,7 +150,7 @@ Try to ingest `labevents.csv.gz` using `read_csv`. What happens? If it takes mor
 #| eval: false
 lab <- read_csv("~/mimic/hosp/labevents.csv.gz")
 ```
-The `read_csv` function did not finish ingesting `labevents.csv.gz`within 5 minutes. It is because the file is too large, and my computer has limited memory. THe `labevents.csv` file is 13GB, we need at least 26 GB of memory to ingest this file, while my computer only has 16 GB of memory.
+**Answer:** The `read_csv` function did not finish ingesting `labevents.csv.gz`within 5 minutes. It is because the file is too large, and my computer has limited memory. THe `labevents.csv` file is 13GB, we need at least 26 GB of memory to ingest this file, while my computer only has 16 GB of memory.
 
 
 ### Q2.2 Ingest selected columns of `labevents.csv.gz` by `read_csv`
@@ -152,7 +160,7 @@ Try to ingest only columns `subject_id`, `itemid`, `charttime`, and `valuenum` i
 #| eval: false
 lab2 <- read_csv("~/mimic/hosp/labevents.csv.gz", col_select = c(subject_id, itemid, charttime, valuenum))
 ```
-It does not solve the ingestion issue. The `read_csv` function did not finish ingesting the selected columns of `labevents.csv.gz` within 5 minutes and lead to a crash. My computer does not have enough memory to ingest this file.
+**Answer:** It does not solve the ingestion issue. The `read_csv` function did not finish ingesting the selected columns of `labevents.csv.gz` within 5 minutes and lead to a crash. My computer does not have enough memory to ingest this file.
 
 ### Q2.3 Ingest subset of `labevents.csv.gz`
 
@@ -171,6 +179,7 @@ Display the first 10 lines of the new file `labevents_filtered.csv.gz`. How many
 zcat < ~/mimic/hosp/labevents.csv.gz | awk -F, '($5 == 50912 || $5 == 50971 || $5 == 50983 || $5 == 50902 || $5 == 50882 || $5 == 51221 || $5 == 51301 || $5 == 50931) {print $2","$5","$7","$10}' | gzip > labevents_filtered.csv.gz
 ```
 
+The first 10 lines of the new file `labevents_filtered.csv.gz`:
 ```{bash}
 zcat < labevents_filtered.csv.gz | head -10
 ```
@@ -178,9 +187,9 @@ zcat < labevents_filtered.csv.gz | head -10
 zcat < labevents_filtered.csv.gz | wc -l
 ```
 ```{r}
-system.time(lab3 <- read_csv("labevents_filtered.csv.gz"))
+time_lab3 <- system.time(lab3 <- read_csv("labevents_filtered.csv.gz"))
 ```
-The `labevents_filtered.csv.gz` file has 24855909 lines. The `read_csv` function took 7.984 seconds to ingest the file.
+**Answer:** The `labevents_filtered.csv.gz` file has 24855909 lines. The `read_csv` function took `r time_lab3[3]` to ingest the file.
 
 ### Q2.4 Ingest `labevents.csv` by Apache Arrow
 
@@ -201,21 +210,23 @@ gzip -dk < ~/mimic/hosp/labevents.csv.gz > ~/labevents.csv
 ```
 
 ```{r}
-system.time(lab4 <- arrow::open_dataset("~/labevents.csv", format = "csv") %>% 
+time_lab4 <- system.time(lab4 <- arrow::open_dataset("~/labevents.csv", format = "csv") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
-  #dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
+  # dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
   dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
   collect())
 ```
-It takes 24.213 seconds to ingest, select, and filter the `labevents.csv` file. 
 ```{r}
 nrow(lab4)
 ```
 ```{r}
 head(lab4, 10)
 ```
+**Answer:**
 
-The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
+-It takes `r time_lab4[3]` to ingest, select, and filter the `labevents.csv` file. 
+
+-The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
 
 
 ### Q2.5 Compress `labevents.csv` to Parquet format and ingest/select/filter
@@ -239,7 +250,7 @@ file.size("labevents.parquet/part-0.parquet")
 ```
 
 ```{r}
-system.time(lab_parquet <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
+time_lab_parquet <- system.time(lab_parquet <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
   dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
   collect())
@@ -250,9 +261,14 @@ nrow(lab_parquet)
 ```{r}
 head(lab_parquet, 10)
 ```
+**Answer:**
+
 - The `labevents.csv` file is 13.7 GB, while the `labevents.parquet` file is about 2 GB.
-- It takes 5 seconds to ingest, select, and filter the `labevents.parquet` file, which is faster than the `labevents.csv` file.
+
+- It takes `r time_lab_parquet[3]` to ingest, select, and filter the `labevents.parquet` file, which is faster than the `labevents.csv` file.
+
 - The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
+
 -  Parquet is a storage format that arranges data in columns, making it ideal for efficiently managing large datasets during both read and write processes. Its design excels particularly when queries target specific columns of a table, guaranteeing optimal performance for such operations.
 
 ### Q2.6 DuckDB
@@ -266,7 +282,8 @@ Ingest the Parquet file, convert it to a DuckDB table by     [`arrow::to_duckdb`
 Write a few sentences to explain what is DuckDB. Imagine you want to explain it to a layman in an elevator.
 
 ```{r}
-system.time(lab_duckdb <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
+time_lab_duckdb <- system.time(
+  lab_duckdb <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
   dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
   arrow::to_duckdb() %>%
@@ -278,9 +295,12 @@ nrow(lab_duckdb)
 ```{r}
 head(lab_duckdb, 10)
 ```
+**Answer:**
 
-- It takes 6 seconds to ingest, convert, select, and filter the `labevents.parquet` file to a DuckDB table.
+- It takes `r time_lab_duckdb[3]` to ingest, convert, select, and filter the `labevents.parquet` file to a DuckDB table.
+
 - The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
+
 - DuckDB is an embeddable SQL OLAP database management system. It is used as an embedded database, which means it runs as part of the application and does not require a separate server process. It is designed to be fast and efficient for analytical queries, and it is optimized for read-heavy workloads. The system is designed for user-friendly integration with other systems.
 
 ## Q3. Ingest and filter `chartevents.csv.gz`
