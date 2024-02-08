@@ -187,9 +187,13 @@ zcat < labevents_filtered.csv.gz | head -10
 zcat < labevents_filtered.csv.gz | wc -l
 ```
 ```{r}
-time_lab3 <- system.time(lab3 <- read_csv("labevents_filtered.csv.gz"))
+(time_lab3 <- system.time(lab3 <- read_csv("labevents_filtered.csv.gz")))
 ```
-**Answer:** The `labevents_filtered.csv.gz` file has 24855909 lines. The `read_csv` function took `r time_lab3[3]` to ingest the file.
+**Answer:** 
+
+- The `labevents_filtered.csv.gz` file has 24855909 lines.
+
+- The `read_csv` function took `r time_lab3[3]` to ingest the file.
 
 ### Q2.4 Ingest `labevents.csv` by Apache Arrow
 
@@ -210,11 +214,11 @@ gzip -dk < ~/mimic/hosp/labevents.csv.gz > ~/labevents.csv
 ```
 
 ```{r}
-time_lab4 <- system.time(lab4 <- arrow::open_dataset("~/labevents.csv", format = "csv") %>% 
+(time_lab4 <- system.time(lab4 <- arrow::open_dataset("~/labevents.csv", format = "csv") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
   # dplyr::filter(itemid == 50912 | itemid == 50971 | itemid == 50983 | itemid == 50902 | itemid == 50882 | itemid == 51221 | itemid == 51301 | itemid == 50931) %>%
   dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
-  collect())
+  collect()))
 ```
 ```{r}
 nrow(lab4)
@@ -224,7 +228,7 @@ head(lab4, 10)
 ```
 **Answer:**
 
--It takes `r time_lab4[3]` to ingest, select, and filter the `labevents.csv` file. 
+-It takes `r time_lab4[3]` seconds to ingest, select, and filter the `labevents.csv` file. 
 
 -The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
 
@@ -250,11 +254,12 @@ file.size("labevents.parquet/part-0.parquet")
 ```
 
 ```{r}
-time_lab_parquet <- system.time(lab_parquet <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
+(time_lab_parquet <- system.time(lab_parquet <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
   dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
-  collect())
+  collect()))
 ```
+
 ```{r}
 nrow(lab_parquet)
 ```
@@ -265,7 +270,7 @@ head(lab_parquet, 10)
 
 - The `labevents.csv` file is 13.7 GB, while the `labevents.parquet` file is about 2 GB.
 
-- It takes `r time_lab_parquet[3]` to ingest, select, and filter the `labevents.parquet` file, which is faster than the `labevents.csv` file.
+- It takes `r time_lab_parquet[3]` seconds to ingest, select, and filter the `labevents.parquet` file, which is faster than the `labevents.csv` file.
 
 - The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
 
@@ -282,13 +287,15 @@ Ingest the Parquet file, convert it to a DuckDB table by     [`arrow::to_duckdb`
 Write a few sentences to explain what is DuckDB. Imagine you want to explain it to a layman in an elevator.
 
 ```{r}
-time_lab_duckdb <- system.time(
+(time_lab_duckdb <- system.time(
   lab_duckdb <- arrow::open_dataset("labevents.parquet/part-0.parquet", format = "parquet") %>% 
   dplyr::select(subject_id, itemid, charttime, valuenum) %>% 
   dplyr::filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>% 
   arrow::to_duckdb() %>%
-  collect())
+  collect()))
 ```
+
+
 ```{r}
 nrow(lab_duckdb)
 ```
@@ -297,7 +304,7 @@ head(lab_duckdb, 10)
 ```
 **Answer:**
 
-- It takes `r time_lab_duckdb[3]` to ingest, convert, select, and filter the `labevents.parquet` file to a DuckDB table.
+- It takes `r time_lab_duckdb[3]` seconds to ingest, convert, select, and filter the `labevents.parquet` file to a DuckDB table.
 
 - The number of rows is 24855909 and the first 10 rows of the result tibble match those in Q2.3.
 
