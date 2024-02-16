@@ -123,7 +123,7 @@ blank_plot <- ggplot() +
   theme_bw()
 ```
 
-```{r, warning=F}
+```{r}
 # Define a function to set the line width based on the care unit
 line_width <- function(x) {
   4*grepl("ICU|CCU", x) + 2.5
@@ -161,15 +161,9 @@ full_plot <- lab_plot +
   theme(legend.position = "bottom", legend.direction = "vertical") 
 ```
 
-
-```{r}
+```{r, warning=FALSE}
 full_plot
 ```
-
-```{r}
-```
-
-
 
 ### Q1.2 ICU stays
 
@@ -178,6 +172,60 @@ ICU stays are a subset of ADT history. This figure shows the vitals of the patie
 ![](10001217_icu.png)
 
 Do a similar visualization for the patient `10013310`.
+
+```{bash}
+zcat < ~/mimic/icu/chartevents.csv.gz | head
+```
+```{bash}
+zcat < ~/mimic/icu/d_items.csv.gz | head
+```
+
+```{r}
+# Extract the item id for vitals "HR", "NBPd", "NBPs", "RR", and "Temperature F".
+patient_id <- 10013310
+d_items <- read_csv("~/mimic/icu/d_items.csv.gz") |>
+  filter(abbreviation %in% c("HR", "NBPd", "NBPs", "RR", "Temperature F"))|>
+  select(itemid, label, abbreviation)
+
+d_items$itemid
+```
+```{r}
+
+```
+
+
+```{bash}
+#| eval: false
+
+# Filter useful information from chartevents.csv.gz according to the item id
+# and patient id
+zcat < ~/mimic/icu/chartevents.csv.gz | awk -F, 'NR == 1 || ($1 == 10013310 && \
+($7 == 220045 || $7 == 220180 || $7 == 220179 || $7 == 223761 || $7 == 220210))\
+{print $1","$3","$5","$7","$9}' | gzip > chartevents_filtered.csv.gz
+```
+
+
+```{r}
+chartevents <- read_csv("chartevents_filtered.csv.gz")
+```
+```{r}
+vitals <- left_join(chartevents, d_items, by = "itemid")|>
+  select(subject_id, stay_id, charttime, valuenum, abbreviation)
+  # collect()
+```
+
+```{r}
+ggplot(vitals, aes(x = charttime, y = valuenum, color = abbreviation)) +
+  geom_point(size = 1.5) +
+  geom_line() +
+  facet_grid(rows = vars(vitals$abbreviation), cols = vars(vitals$stay_id), scales = "free") +
+  labs(title = "Patient 10013310 ICU Stays - Vitals", x = "", y = "") +
+  scale_x_datetime(labels = scales::date_format("%b %d %H:%M"), guide = guide_axis(n.dodge = 2)) +
+  theme_light() + 
+  theme(axis.text=element_text(size=7.5))+
+  guides(color = "none") 
+```
+
 
 ## Q2. ICU stays
 
