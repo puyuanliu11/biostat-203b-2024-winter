@@ -50,21 +50,22 @@ Do a similar visualization for the patient with `subject_id` 10013310 using ggpl
 
 Hint: We need to pull information from data files `patients.csv.gz`, `admissions.csv.gz`, `transfers.csv.gz`, `labevents.csv.gz`, `procedures_icd.csv.gz`, `diagnoses_icd.csv.gz`, `d_icd_procedures.csv.gz`, and `d_icd_diagnoses.csv.gz`. For the big file `labevents.csv.gz`, use the Parquet format you generated in Homework 2. For reproducibility, make the Parquet folder `labevents_pq` available at the current working directory `hw3`, for example, by a symbolic link. Make your code reproducible.
 
-```{r}
+```{r, show_col_types = FALSE}
 # Extract datasets and filter useful information
 patient_id <- 10013310
-patients <- read_csv("~/mimic/hosp/patients.csv.gz") |>
+patients <- read_csv("~/mimic/hosp/patients.csv.gz", show_col_types = FALSE) |>
   filter(subject_id == patient_id) |>
   select(subject_id, gender, anchor_age) |>
   collect()
 
-admissions <- read_csv("~/mimic/hosp/admissions.csv.gz") |>
+admissions <- read_csv("~/mimic/hosp/admissions.csv.gz", 
+                       show_col_types = FALSE) |>
   filter(subject_id == patient_id) |>
   select(subject_id, race)|>
   distinct()|>
   collect()
 
-adt <- read_csv("~/mimic/hosp/transfers.csv.gz") |>
+adt <- read_csv("~/mimic/hosp/transfers.csv.gz", show_col_types = FALSE) |>
   filter(subject_id == patient_id) |>
   select(intime, outtime, careunit)|>
   drop_na()|>
@@ -76,21 +77,25 @@ lab <- arrow::open_dataset("labevents_pq/part-0.parquet", format = "parquet")%>%
   dplyr::distinct() %>%
   collect()
 
-procedures_icd <- read_csv("~/mimic/hosp/procedures_icd.csv.gz") |>
+procedures_icd <- read_csv("~/mimic/hosp/procedures_icd.csv.gz", 
+                           show_col_types = FALSE) |>
   filter(subject_id == patient_id) |>
   select(subject_id, seq_num, icd_code, chartdate)|>
   collect()
 
-diagnoses_icd <- read_csv("~/mimic/hosp/diagnoses_icd.csv.gz") |>
+diagnoses_icd <- read_csv("~/mimic/hosp/diagnoses_icd.csv.gz",
+                          show_col_types = FALSE) |>
   filter(subject_id == patient_id & seq_num <= 3) |>
   select(subject_id, seq_num, icd_code)|>
   collect()
 
-d_icd_procedures <- read_csv("~/mimic/hosp/d_icd_procedures.csv.gz") |>
+d_icd_procedures <- read_csv("~/mimic/hosp/d_icd_procedures.csv.gz",
+                             show_col_types = FALSE) |>
   select(icd_code, long_title)|>
   collect()
 
-d_icd_diagnoses <- read_csv("~/mimic/hosp/d_icd_diagnoses.csv.gz") |>
+d_icd_diagnoses <- read_csv("~/mimic/hosp/d_icd_diagnoses.csv.gz",
+                            show_col_types = FALSE) |>
   select(icd_code, long_title)|>
   collect()
 ```
@@ -120,7 +125,7 @@ blank_plot <- ggplot() +
        x = "Calendar time",
        y = "") +
   scale_y_discrete(limits = c("procedure", "lab", "ADT")) +
-  theme_bw()
+  theme_light() 
 ```
 
 ```{r}
@@ -142,14 +147,16 @@ adt_plot <- blank_plot + ggtitle("Patient 10013310, F, 70 years old, black") +
 
 # Plot the second layer with lab events.
 lab_plot <- adt_plot +
-  geom_point(data = lab, aes(x = charttime, y = "lab"), shape = 3, size = 2.5, color = "black") 
+  geom_point(data = lab, aes(x = charttime, y = "lab"),
+             shape = 3, size = 2.5, color = "black") 
 ```
 
 ```{r}
 library(stringr)
 # 
 long_proc <- procedure$long_title
-procedure$long_title <- str_extract(long_proc, paste(rep("\\w+", 4), collapse = " "))
+procedure$long_title <- str_extract(long_proc, 
+                                    paste(rep("\\w+", 4), collapse = " "))
 
 full_plot <- lab_plot +
   geom_point(data = procedure, aes(x = as.POSIXct(chartdate, format="%Y-%m-%d"),
@@ -173,12 +180,6 @@ ICU stays are a subset of ADT history. This figure shows the vitals of the patie
 
 Do a similar visualization for the patient `10013310`.
 
-```{bash}
-zcat < ~/mimic/icu/chartevents.csv.gz | head
-```
-```{bash}
-zcat < ~/mimic/icu/d_items.csv.gz | head
-```
 
 ```{r}
 # Extract the item id for vitals "HR", "NBPd", "NBPs", "RR", and "Temperature F".
@@ -189,11 +190,6 @@ d_items <- read_csv("~/mimic/icu/d_items.csv.gz") |>
 
 d_items$itemid
 ```
-```{r}
-
-```
-
-
 ```{bash}
 #| eval: false
 
@@ -204,19 +200,16 @@ zcat < ~/mimic/icu/chartevents.csv.gz | awk -F, 'NR == 1 || ($1 == 10013310 && \
 {print $1","$3","$5","$7","$9}' | gzip > chartevents_filtered.csv.gz
 ```
 
-
 ```{r}
 chartevents <- read_csv("chartevents_filtered.csv.gz")
-```
-```{r}
+
 vitals <- left_join(chartevents, d_items, by = "itemid")|>
   select(subject_id, stay_id, charttime, valuenum, abbreviation)
-  # collect()
 ```
 
 ```{r}
 ggplot(vitals, aes(x = charttime, y = valuenum, color = abbreviation)) +
-  geom_point(size = 1.5) +
+  geom_point(size = 1.2) +
   geom_line() +
   facet_grid(rows = vars(vitals$abbreviation), cols = vars(vitals$stay_id), scales = "free") +
   labs(title = "Patient 10013310 ICU Stays - Vitals", x = "", y = "") +
@@ -238,9 +231,35 @@ zcat < ~/mimic/icu/icustays.csv.gz | head
 
 Import `icustays.csv.gz` as a tibble `icustays_tble`. 
 
+**Answer:** I ingest `icustays.csv.gz` as a tibble by `read_csv`
+```{r}
+icustays_tble <- read_csv("~/mimic/icu/icustays.csv.gz")
+```
+
 ### Q2.2 Summary and visualization
 
-How many unique `subject_id`? Can a `subject_id` have multiple ICU stays? Summarize the number of ICU stays per `subject_id` by graphs. 
+How many unique `subject_id`? Can a `subject_id` have multiple ICU stays? Summarize the number of ICU stays per `subject_id` by graphs.
+```{r}
+icustays_tble |> 
+  distinct(subject_id) |> 
+  count()
+```
+
+```{r}
+nrow(icustays_tble)
+```
+**Answer:** There are 50920 unique `subject_id` and 73181 ICU stays. Thus a `subject_id` can have multiple ICU stays. Here is a graph summarization.
+```{r}
+icustays_tble |> 
+  count(subject_id) |> 
+  ggplot(aes(x = n)) +
+  geom_bar() +
+  labs(title = "Number of ICU stays per subject ID", 
+       x = "Number of ICU stays",
+       y = "Number of subject IDs") +
+  theme_light()
+```
+
 
 ## Q3. `admissions` data
 
