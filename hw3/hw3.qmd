@@ -50,7 +50,7 @@ Do a similar visualization for the patient with `subject_id` 10013310 using ggpl
 
 Hint: We need to pull information from data files `patients.csv.gz`, `admissions.csv.gz`, `transfers.csv.gz`, `labevents.csv.gz`, `procedures_icd.csv.gz`, `diagnoses_icd.csv.gz`, `d_icd_procedures.csv.gz`, and `d_icd_diagnoses.csv.gz`. For the big file `labevents.csv.gz`, use the Parquet format you generated in Homework 2. For reproducibility, make the Parquet folder `labevents_pq` available at the current working directory `hw3`, for example, by a symbolic link. Make your code reproducible.
 
-```{r, show_col_types = FALSE}
+```{r}
 # Extract datasets and filter useful information
 patient_id <- 10013310
 patients <- read_csv("~/mimic/hosp/patients.csv.gz", show_col_types = FALSE) |>
@@ -184,7 +184,7 @@ Do a similar visualization for the patient `10013310`.
 ```{r}
 # Extract the item id for vitals "HR", "NBPd", "NBPs", "RR", and "Temperature F".
 patient_id <- 10013310
-d_items <- read_csv("~/mimic/icu/d_items.csv.gz") |>
+d_items <- read_csv("~/mimic/icu/d_items.csv.gz", show_col_types = FALSE) |>
   filter(abbreviation %in% c("HR", "NBPd", "NBPs", "RR", "Temperature F"))|>
   select(itemid, label, abbreviation)
 
@@ -233,7 +233,8 @@ Import `icustays.csv.gz` as a tibble `icustays_tble`.
 
 **Answer:** I ingest `icustays.csv.gz` as a tibble by `read_csv`
 ```{r}
-icustays_tble <- read_csv("~/mimic/icu/icustays.csv.gz")
+icustays_tble <- read_csv("~/mimic/icu/icustays.csv.gz", 
+                          show_col_types = FALSE)
 ```
 
 ### Q2.2 Summary and visualization
@@ -272,6 +273,12 @@ zcat < ~/mimic/hosp/admissions.csv.gz | head
 
 Import `admissions.csv.gz` as a tibble `admissions_tble`.
 
+**Answer:** I ingest `admissions.csv.gz` as a tibble by `read_csv`
+```{r}
+admissions_tble <- read_csv("~/mimic/hosp/admissions.csv.gz", 
+                            show_col_types = FALSE)
+```
+
 ### Q3.2 Summary and visualization
 
 Summarize the following information by graphics and explain any patterns you see.
@@ -285,6 +292,53 @@ According to the [MIMIC-IV documentation](https://mimic.mit.edu/docs/iv/about/co
 
 > All dates in the database have been shifted to protect patient confidentiality. Dates will be internally consistent for the same patient, but randomly distributed in the future. Dates of birth which occur in the present time are not true dates of birth. Furthermore, dates of birth which occur before the year 1900 occur if the patient is older than 89. In these cases, the patient’s age at their first admission has been fixed to 300.
 
+
+```{r}
+admissions_tble |> 
+  count(subject_id) |> 
+  ggplot(aes(x = n)) +
+  geom_bar() +
+  labs(title = "Number of admissions per patient", 
+       x = "Number of admissions",
+       y = "Number of patients") +
+  theme_light()
+```
+
+```{r}
+admissions_tble |> 
+  ggplot(aes(x = hour(admittime))) +
+  geom_bar() +
+  labs(title = "Admission hour", 
+       x = "Hour",
+       y = "Count") +
+  theme_light()
+```
+**Answer:** The admission hours on 0AM, 7AM., and 2PM until the midnight have higher frequency than other hours. It might be due to the shift change of the hospital staffs.
+
+```{r}
+admissions_tble |> 
+  ggplot(aes(x = minute(admittime))) +
+  geom_bar() +
+  labs(title = "Admission minute", 
+       x = "Minute",
+       y = "Count") +
+  theme_light()
+```
+**Answer:** The admission minutes are not uniformly distributed overall. The frequency of 0, 15, 30, and 45 minutes are much higher than other minutes. While other minutes are approximately uniformly distributed. It might be due to the rounding of the admission time.
+
+```{r}
+admissions_tble |> 
+  mutate(los = as.numeric(difftime(dischtime, admittime, units = "days"))) |> 
+  ggplot(aes(x = los)) +
+  geom_histogram(binwidth = 1) +
+  labs(title = "Length of hospital stay", 
+       x = "Length of stay (days)",
+       y = "Count") +
+  theme_light()
+```
+**Answer:** The length of hospital stay is right-skewed. Most of the patients stay in the hospital for less than 10 days. There are some patients stay in the hospital for more than 100 days. It might be due to the patients with chronic diseases or severe conditions.
+
+
 ## Q4. `patients` data
 
 Patient information is available in `patients.csv.gz`. See <https://mimic.mit.edu/docs/iv/modules/hosp/patients/> for details of each field in this file. The first 10 lines are
@@ -296,9 +350,52 @@ zcat < ~/mimic/hosp/patients.csv.gz | head
 
 Import `patients.csv.gz` (<https://mimic.mit.edu/docs/iv/modules/hosp/patients/>) as a tibble `patients_tble`.
 
+**Answer:** I ingest `patients.csv.gz` as a tibble by `read_csv`
+```{r}
+patients_tble <- read_csv("~/mimic/hosp/patients.csv.gz", 
+                          show_col_types = FALSE)
+```
+
 ### Q4.2 Summary and visualization
 
 Summarize variables `gender` and `anchor_age` by graphics, and explain any patterns you see.
+
+```{r}
+count(patients_tble, gender)
+```
+```{r}
+range(patients_tble$anchor_age)
+```
+
+```{r}
+patients_tble|> 
+  ggplot(aes(x = anchor_age, fill = gender)) +
+  geom_bar() +
+  labs(title = "Distribution of anchor age", 
+       x = "Anchor age",
+       y = "Count") +
+  theme_light()
+```
+```{r}
+patients_tble|> 
+  ggplot(aes(x = gender, y = anchor_age, color=gender)) +
+  geom_violin() +
+  geom_boxplot(width = 0.2) +
+  labs(title = "Distribution of anchor age by gender", 
+       x = "Gender",
+       y = "Anchor Age") +
+  guides(color = "none")
+```
+**Answer:** 
+
+- I ploted a bar plot and a violin plot to show the distribution of anchor age by gender. 
+
+- The number of females is slightly higher than the number of males.
+
+- There are more patients with anchor age 19 to 30 and age 91 than other ages.
+
+- Compared with females, males have a higher proportion of patients with anchor age around 50 to 65, and lower proportion of patients with achor age less than 30.
+
 
 ## Q5. Lab results
 
