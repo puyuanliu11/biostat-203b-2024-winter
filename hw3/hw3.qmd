@@ -148,7 +148,7 @@ adt$careunit <- sapply(careu, extract_before_bracket)
 ```{r}
 # Define a function to set the line width based on the care unit
 line_width <- function(x) {
-  4*grepl("ICU|CCU", x) + 2.5
+  4*grepl("Care Unit", x) + 2.5
 }
 
 # Plot the first layer with ADT history.
@@ -445,26 +445,38 @@ Hint: Use the Parquet format you generated in Homework 2. For reproducibility, m
 subset_lab <- c("50912", "50971", "50983", "50902", 
                 "50882", "51221", "51301", "50931")
 
+d_labitems_tble <- read_csv("~/mimic/hosp/d_labitems.csv.gz", show_col_types = FALSE) |> 
+  filter(itemid %in% subset_lab) |>
+  print(width = Inf)
+```
+```{r}
 labevents <- arrow::open_dataset("labevents_pq/part-0.parquet", format = "parquet")%>% 
-  dplyr::filter(itemid %in% subset_lab & subject_id %in% icustays_tble$subject_id) %>% 
-  dplyr::select(subject_id, itemid, charttime, storetime, valuenum) %>% 
+  dplyr::filter(itemid %in% subset_lab) %>%
+  dplyr::filter(subject_id %in% icustays_tble$subject_id) %>%
+  dplyr::select(subject_id, itemid, storetime, valuenum) %>%
   collect()
 ```
 
-```{r}
-label <- read_csv("~/mimic/hosp/d_labitems.csv.gz", show_col_types = FALSE) |> 
-  filter(itemid %in% subset_lab) |>
-  select(itemid, label)
+```{r, warning=FALSE}
+lab_selected <- labevents |>
+  left_join(
+    select(icustays_tble, subject_id, stay_id, intime),
+    by = "subject_id"
+    ) |>
+  # filter the last available measurement before the ICU stay
+  filter(storetime < intime) |>
+  # group by subject_id, stay_id, itemid
+  group_by(subject_id, stay_id, itemid) |>
+  # 
+  arrange(storetime, by_group = TRUE) |>
+  slice_tail(n = 1) |>
+  select(-intime, -storetime) |>
+  pivot_wider(names_from = itemid, values_from = valuenum) |>
+  rename_with(~d_labitems_tble$label[d_labitems_tble$itemid == .x], .cols = -c(subject_id, stay_id)) |>
+  print(width = Inf)
 ```
 
-```{r}
-labevents <- left_join(labevents, label, by = "itemid")|>
-  mutate(storetime = as.POSIXct(storetime))|>
-  group_by(subject_id, itemid)|>
-  filter(storetime == max(storetime))|>
-  ungroup()|>
-  pivot_wider(names_from = label, values_from = valuenum)
-```
+
 ## Q6. Vitals from charted events
 
 `chartevents.csv.gz` (<https://mimic.mit.edu/docs/iv/modules/icu/chartevents/>) contains all the charted data available for a patient. During their ICU stay, the primary repository of a patient’s information is their electronic chart. The `itemid` variable indicates a single measurement type in the database. The `value` variable is the value measured for `itemid`. The first 10 lines of `chartevents.csv.gz` are
