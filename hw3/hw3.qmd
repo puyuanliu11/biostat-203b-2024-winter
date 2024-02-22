@@ -133,24 +133,11 @@ blank_plot <- ggplot() +
   theme_light() 
 ```
 
-```{r}
-library(stringr)
-
-careu <- adt$careunit
-
-extract_before_bracket <- function(x) {
-  result <- sub("\\s*\\(.*", "", x)
-  return(result)
-}
-
-# Apply the function to each element of the vector
-adt$careunit <- sapply(careu, extract_before_bracket)
-```
 
 ```{r}
 # Define a function to set the line width based on the care unit
 line_width <- function(x) {
-  4*grepl("Care Unit", x) + 2.5
+  4*grepl("(ICU|CCU)", x) + 2.5
 }
 
 # Plot the first layer with ADT history.
@@ -161,7 +148,7 @@ adt_plot <- blank_plot + ggtitle("Patient 10013310, F, 70 years old, black") +
                                yend = "ADT",
                                color = careunit),
                linewidth = line_width(adt$careunit)) +
-  guides(color = guide_legend(title = "Care Unit", ncol = 1, order = 1)) +
+  guides(color = guide_legend(title = "Care Unit", ncol = 3, order = 1)) +
   theme(legend.position = "bottom") 
 
 # Plot the second layer with lab events.
@@ -188,18 +175,19 @@ procedure$long_title <- sapply(long_proc, extract_before_comma)
 full_plot <- lab_plot +
   geom_point(data = procedure, aes(x = as.POSIXct(chartdate, format="%Y-%m-%d"),
                                    y = "procedure", shape = long_title),
-             size = 2.7,
+             size = 4,
              color = "black") +
   guides(shape = guide_legend(title = "Procedure", 
                               ncol = 2, order = 2, horiz = T), 
          label = c("Dilation of Coronary Artery", "Long")) +
-  theme(legend.text = element_text(size = 6)) +
-  theme(legend.position = "bottom", legend.direction = "vertical") 
+  theme(legend.text = element_text(size = 8)) +
+  theme(legend.position = "bottom", legend.box = "vertical") 
+
+ggsave("10013310_adt.png", full_plot, width = 10, height = 6)
 ```
 
-```{r, warning=FALSE}
-full_plot
-```
+![](10013310_adt.png)
+
 
 ### Q1.2 ICU stays
 
@@ -594,20 +582,201 @@ Summarize the following information about the ICU stay cohort `mimic_icu_cohort`
 
 - Length of ICU stay `los` vs demographic variables (race, insurance, marital_status, gender, age at intime)
 
-- Length of ICU stay `los` vs the last available lab measurements before ICU stay
+- Length of ICU stay `los` vs race
+```{r}
+race_summary <- mimic_icu_cohort %>%
+  group_by(race) %>%
+  summarize(mean_los_race = mean(los, na.rm = TRUE))
+race_summary
+```
+```{r}
+# Visualize the results
+# Mean length of ICU stay `los` vs ethnicity groups
+# I sorted the mean length of ICU Stay of groups in ascending order.
+ggplot(race_summary, aes(x = reorder(race, + mean_los_race), y = mean_los_race)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "LOS vs Demographic Variables",
+       x = "Demographic Variables",
+       y = "Mean Length of ICU Stay") +
+  theme(axis.text.x = element_text(size=5, angle = 90, vjust = 0.5, hjust=1))
+```
 
-- Length of ICU stay `los` vs the average vital measurements within the first hour of ICU stay
+```{r}
+insurance_summary <- mimic_icu_cohort %>%
+  group_by(insurance) %>%
+  summarize(mean_los_insurance = mean(los, na.rm = TRUE))
+insurance_summary
+```
 
-- Length of ICU stay `los` vs first ICU unit
+```{r}
+mimic_icu_cohort |> 
+  ggplot(aes(x = los, fill = insurance)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Length of ICU stay Distribution by Insurance", 
+       x = "Length of ICU stay (days)",
+       y = "Count") +
+  theme_light()
+```
+```{r}
+# Since the distribution length of ICU stay is right-skewed, I grouped the length of ICU stay into 5 groups and plot a percentage plot, which will make the plot more readable.
+
+mimic_icu_cohort <- mimic_icu_cohort %>%
+  mutate(los_grouped = cut(los, breaks = c(0, 5, 10, 20, 30, Inf), 
+                           labels = c("0-5", "5-10", "10-20", "20-30", "30+")))
+
+mimic_icu_cohort %>%
+  ggplot(aes(x = los_grouped, fill = insurance)) +
+  geom_bar(position = "fill", color = "white") +
+  labs(title = "Percentage of ICU Length of Stay by Insurance",
+       x = "Length of ICU Stay",
+       y = "Percentage") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  # Format y-axis as percentage
+  theme_light()
+```
 
 
+- Length of ICU stay `los` vs marital status
+```{r}
+marital_status_summary <- mimic_icu_cohort %>%
+  group_by(marital_status) %>%
+  summarize(mean_los_marital_status = mean(los, na.rm = TRUE))
+marital_status_summary
+```
 
+```{r}
+# Histogram plot of length of ICU stay distribution by marital status
+mimic_icu_cohort |> 
+  ggplot(aes(x = los, fill = marital_status)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Length of ICU stay Distribution by Marital Status", 
+       x = "Length of ICU stay (days)",
+       y = "Count") +
+  theme_light()
+```
+```{r}
+# Percentage plot of length of ICU stay by marital status
+mimic_icu_cohort %>%
+  ggplot(aes(x = los_grouped, fill = marital_status)) +
+  geom_bar(position = "fill", color = "white") +
+  labs(title = "Percentage of ICU Length of Stay by marital status",
+       x = "Length of ICU Stay",
+       y = "Percentage") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  
+  theme_light()
+```
+```{r}
+# Violin plot of length of ICU stay by marital status
+mimic_icu_cohort %>%
+  ggplot(aes(x = marital_status, y = los, fill = marital_status)) +
+  geom_violin() +
+  geom_boxplot(width = 0.2) +
+  labs(title = "Distribution of ICU Length of Stay by marital status", 
+       x = "Marital Status",
+       y = "Length of ICU Stay") +
+  guides(color = "none") +
+  theme_light()
+```
+- Length of ICU stay `los` vs gender
 
+```{r}
+gender_summary <- mimic_icu_cohort |>
+  group_by(gender)|>
+  summarize(mean_los_gender = mean(los, na.rm = TRUE))
+gender_summary
+```
+
+```{r}
+# Percentage plot of length of ICU stay by gender
+mimic_icu_cohort %>%
+  ggplot(aes(x = los_grouped, fill = gender)) +
+  geom_bar(position = "fill", color = "white") +
+  labs(title = "Percentage of ICU Length of Stay by gender",
+       x = "Length of ICU Stay",
+       y = "Percentage") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  
+  theme_light()
+```
+- Length of ICU stay `los` vs age at intime
+
+```{r}
+# Fit a linear regression of length of ICU stay `los` vs age at intime
+lm_los_age <- lm(los ~ age, data = mimic_icu_cohort)
+summary(lm_los_age)
+```
+we did not find a significant relationship between length of ICU stay and age at intime.
 
 
 ```{r}
-# mimic_icu_cohort |>
-#   ggplot(aes(x = los, y = age, color
+summary(mimic_icu_cohort$age)
+```
+```{r}
+mimic_icu_cohort <- mimic_icu_cohort %>%
+  mutate(age_grouped = cut(age, breaks = c(18, 30, 40, 50, 60, 70, 80, 90, Inf), 
+                           labels = c("18-30", "30-40", "40-50", "50-60", 
+                           "60-70", "70-80", "80-90", "90+")))
+
+# Percentage plot of length of ICU stay (grouped) by age of intime (grouped)
+mimic_icu_cohort %>%
+  ggplot(aes(x = los_grouped, fill = age_grouped)) +
+  geom_bar(position = "fill", color = "white") +
+  labs(title = "Percentage of ICU Length of Stay by Age",
+       x = "Length of ICU Stay",
+       y = "Percentage") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  
+  theme_light()
+```
+- Length of ICU stay `los` vs the last available lab measurements before ICU stay
+
+```{r, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Reshape the data using gather
+mimic_icu_cohort_long <- mimic_icu_cohort %>%
+  gather(key = "lab_variable", value = "lab_value", 28:35)
+
+# Plot los ~ last available lab measurements for multiple variables
+mimic_icu_cohort_long |>
+  ggplot(mapping = aes(x = lab_value, y = los)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) +
+  facet_wrap(~ lab_variable, scales = "free") +
+  labs(title = "Length of ICU stays vs 
+       Last available lab measurements before ICU stay",
+       x = "Last available lab measurements before ICU stay",
+       y = "Length of ICU stays (days)")
+```
+
+- Length of ICU stay `los` vs the first vital measurements within the ICU stay
+
+```{r, warning=FALSE}
+# Reshape the data using gather
+mimic_icu_cohort_long_2 <- mimic_icu_cohort %>%
+  gather(key = "vital_variable", value = "vital_value", 36:40)
+
+# Plot los ~ last available lab measurements for multiple variables
+mimic_icu_cohort_long_2 |>
+  ggplot(mapping = aes(x = vital_value, y = los)) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) +
+  facet_wrap(~ vital_variable, scales = "free") +
+  labs(title = "Length of ICU stays vs 
+       first vital measurements within the ICU stay",
+       x = "First vital measurements within the ICU stay",
+       y = "Length of ICU stays (days)")
+```
+
+- Length of ICU stay `los` vs first ICU unit
+
+```{r}
+# Percentage plot of length of ICU stay by first ICU Unit
+mimic_icu_cohort %>%
+  ggplot(aes(x = los_grouped, fill = first_careunit)) +
+  geom_bar(position = "fill", color = "white") +
+  labs(title = "Percentage of ICU Length of Stay Distributed by first ICU Unit",
+       x = "Length of ICU Stay",
+       y = "Percentage") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  
+  theme_light()
 ```
 
 
