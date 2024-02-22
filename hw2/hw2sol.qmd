@@ -339,3 +339,25 @@ zcat < chartevents_filtered.csv.gz | head -10
 ```{bash}
 zcat < chartevents_filtered.csv.gz | wc -l
 ```
+
+- I did not generated the Parquet format in Homework 2. I will generate the Parquet format here, to save some memory, I filtered the useful information from `chartevents.csv.gz` according to the item id and then decompressed `chartevents_filtered_2.csv.gz` to `chartevents_2.csv`. Finally, I used `arrow` to convert `chartevents_2.csv` to Parquet format.
+
+```{bash}
+#| eval: false
+# Filter useful information from chartevents.csv.gz according to the item id
+zcat < ~/mimic/icu/chartevents.csv.gz | awk -F, 'NR == 1 || \
+($7 == 220045 || $7 == 220180 || $7 == 220179 || $7 == 223761 || $7 == 220210)\
+{print $1","$3","$5","$7","$9}' | gzip > chartevents_filtered_2.csv.gz
+```
+
+- Decompress `chartevents_filtered_2.csv.gz` to `chartevents_2.csv`:
+```{bash}
+#| eval: false
+gzip -dk < ./chartevents_filtered_2.csv.gz > ~/chartevents_2.csv
+```
+
+```{r eval=FALSE}
+chart_csv <- arrow::open_dataset("~/chartevents_2.csv", format = 'csv')
+arrow::write_dataset(chart_csv, "chartevents_pq")
+```
+
