@@ -466,23 +466,29 @@ labevents <- arrow::open_dataset("labevents_pq/part-0.parquet",
 ```
 
 ```{r, warning=FALSE}
-labevents_tble <- labevents |>
-  left_join(
-    select(icustays_tble, subject_id, stay_id, intime),
-    by = "subject_id"
-    ) |>
-  # filter the last available measurement before the ICU stay
-  filter(storetime < intime) |>
-  # group by subject_id, stay_id, itemid
-  group_by(subject_id, stay_id, itemid) |>
-  # 
-  arrange(storetime, by_group = TRUE) |>
-  slice_tail(n = 1) |>
-  select(-intime, -storetime) |>
-  pivot_wider(names_from = itemid, values_from = valuenum) |>
-  rename_with(~d_labitems_tble$label[d_labitems_tble$itemid == .x], 
-              .cols = -c(subject_id, stay_id)) |>
-  print(width = Inf)
+if (file.exists("labevents_tble.rds")) {
+  labevents_tble <- read_rds("labevents_tble.rds")
+  labevents_tble
+} else {
+  labevents_tble <- labevents |>
+    left_join(
+      select(icustays_tble, subject_id, stay_id, intime),
+      by = "subject_id"
+      ) |>
+    # filter the last available measurement before the ICU stay
+    filter(storetime < intime) |>
+    # group by subject_id, stay_id, itemid
+    group_by(subject_id, stay_id, itemid) |>
+    # 
+    arrange(storetime, by_group = TRUE) |>
+    slice_tail(n = 1) |>
+    select(-intime, -storetime) |>
+    pivot_wider(names_from = itemid, values_from = valuenum) |>
+    rename_with(~d_labitems_tble$label[d_labitems_tble$itemid == .x], 
+                .cols = -c(subject_id, stay_id)) |>
+    print(width = Inf)|>
+    write_rds("labevents_tble.rds")
+}
 ```
 
 
@@ -517,55 +523,42 @@ d_items_tble <- read_csv("~/mimic/icu/d_items.csv.gz",
   print(width = Inf)
 ```
 
-- I did not generated the Parquet format in Homework 2. I will generate the Parquet format here, to save some memory, I filtered the useful information from `chartevents.csv.gz` according to the item id and then decompressed `chartevents_filtered_2.csv.gz` to `chartevents_2.csv`. Finally, I used `arrow` to convert `chartevents_2.csv` to Parquet format.
-
-```{bash}
-#| eval: false
-# Filter useful information from chartevents.csv.gz according to the item id
-zcat < ~/mimic/icu/chartevents.csv.gz | awk -F, 'NR == 1 || \
-($7 == 220045 || $7 == 220180 || $7 == 220179 || $7 == 223761 || $7 == 220210)\
-{print $1","$3","$5","$7","$9}' | gzip > chartevents_filtered_2.csv.gz
-```
-
-- Decompress `chartevents_filtered_2.csv.gz` to `chartevents_2.csv`:
-```{bash}
-#| eval: false
-gzip -dk < ./chartevents_filtered_2.csv.gz > ~/chartevents_2.csv
-```
-
-```{r eval=FALSE}
-chart_csv <- arrow::open_dataset("~/chartevents_2.csv", format = 'csv')
-arrow::write_dataset(chart_csv, "chartevents_pq")
-```
 
 ```{r}
 chart <- arrow::open_dataset("chartevents_pq/part-0.parquet", 
                              format = "parquet")%>% 
   dplyr::filter(subject_id %in% icustays_tble$subject_id) %>%
+  dplyr::filter(itemid %in% subset_vital) %>%
   dplyr::select(subject_id, itemid, charttime, valuenum) %>%
   collect() %>%
   print(width = Inf)
 ```
 
 ```{r, warning=FALSE}
-chartevents_tble <- chart |>
-  left_join(
-    select(icustays_tble, subject_id, stay_id, intime, outtime),
-    by = "subject_id"
-    ) |>
-  # filter the first vital measurement during the ICU stay
-  filter(charttime >= intime) |>
-  filter(charttime <= outtime) |>
-  # group by subject_id, stay_id, itemid
-  group_by(subject_id, stay_id, itemid) |>
-  # 
-  arrange(charttime, by_group = TRUE) |>
-  slice_head(n = 1) |>
-  select(-intime, -charttime, -outtime) |>
-  pivot_wider(names_from = itemid, values_from = valuenum) |>
-  rename_with(~d_items_tble$label[d_items_tble$itemid == .x],
-              .cols = -c(subject_id, stay_id)) |>
+if (file.exists("chartevents_tble.rds")) {
+  chartevents_tble <- read_rds("chartevents_tble.rds")|>
   print(width = Inf)
+} else {
+  chartevents_tble <- chart |>
+    left_join(
+      select(icustays_tble, subject_id, stay_id, intime, outtime),
+      by = "subject_id"
+      ) |>
+    # filter the first vital measurement during the ICU stay
+    filter(charttime >= intime) |>
+    filter(charttime <= outtime) |>
+    # group by subject_id, stay_id, itemid
+    group_by(subject_id, stay_id, itemid) |>
+    # 
+    arrange(charttime, by_group = TRUE) |>
+    slice_head(n = 1) |>
+    select(-intime, -charttime, -outtime) |>
+    pivot_wider(names_from = itemid, values_from = valuenum) |>
+    rename_with(~d_items_tble$label[d_items_tble$itemid == .x],
+                .cols = -c(subject_id, stay_id)) |>
+    print(width = Inf)|>
+    write_rds("chartevents_tble.rds")
+}
 ```
 
 
@@ -583,6 +576,18 @@ The final `mimic_icu_cohort` should have one row per ICU stay and columns for ea
 
 ![](mimic_icu_cohort.png)
 
+```{r}
+mimic_icu_cohort <- icustays_tble |>
+  left_join(admissions_tble, by = c("subject_id", "hadm_id")) |>
+  left_join(patients_tble, by = "subject_id") |>
+  left_join(labevents_tble, by = c("subject_id", "stay_id")) |>
+  left_join(chartevents_tble, by = c("subject_id", "stay_id")) |>
+  mutate(age = anchor_age + year(intime) - anchor_year) %>%
+  # filter patients with aged >= 18 at ·intime·
+  filter(age >= 18) %>%
+  print(width = Inf)
+```
+
 ## Q8. Exploratory data analysis (EDA)
 
 Summarize the following information about the ICU stay cohort `mimic_icu_cohort` using appropriate numerics or graphs:
@@ -594,3 +599,16 @@ Summarize the following information about the ICU stay cohort `mimic_icu_cohort`
 - Length of ICU stay `los` vs the average vital measurements within the first hour of ICU stay
 
 - Length of ICU stay `los` vs first ICU unit
+
+
+
+
+
+
+```{r}
+# mimic_icu_cohort |>
+#   ggplot(aes(x = los, y = age, color
+```
+
+
+
