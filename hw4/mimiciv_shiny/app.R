@@ -299,30 +299,33 @@ server <- function(input, output, session){
     
     # Plot the first layer with ADT history.
     adt_plot <- blank_plot + 
-      geom_segment(data = adt(), aes(x = intime,
-                                     xend = outtime,
-                                     y = "ADT", 
-                                     yend = "ADT",
-                                     color = careunit),
+      geom_segment(data = adt(), 
+                   aes(x = intime,
+                       xend = outtime,
+                       y = "ADT", 
+                       yend = "ADT",
+                       color = careunit),
                    linewidth = line_width(adt() %>% pull(careunit))) +
-      guides(color = guide_legend(title = "Care Unit", ncol = 3, order = 1)) +
+      guides(color = guide_legend(title = "Care Unit", 
+                                  ncol = 3, 
+                                  order = 1)) +
       theme(legend.position = "bottom") 
     
     # Plot the second layer with lab events.
     lab_plot <- adt_plot +
-      geom_point(data = lab(), aes(x = charttime, y = "Lab"),
-                 shape = 3, size = 2.5, color = "black") 
+      geom_point(data = lab(), 
+                 aes(x = charttime, 
+                     y = "Lab"),
+                 shape = 3,
+                 size = 2.5, 
+                 color = "black") 
     
     
     full_plot <- lab_plot +
-      geom_point(data = procedure(), aes(x = as.POSIXct(chartdate, 
-                                                        format="%Y-%m-%d"),
-                                         y = "Procedure", 
-                                         shape = str_sub(
-                                           procedure() %>% pull(long_title), 
-                                           1, 
-                                           35
-                                         )
+      geom_point(data = procedure(), 
+                 aes(x = as.POSIXct(chartdate, format="%Y-%m-%d"),
+                     y = "Procedure", 
+                     shape = str_sub(procedure() %>% pull(long_title), 1, 35)
       ),
       size = 4,
       color = "black") +
@@ -334,7 +337,8 @@ server <- function(input, output, session){
       scale_shape_manual(values = c(1:n_distinct(procedure() %>%
                                                    pull(long_title)))) +
       theme(legend.text = element_text(size = 8),
-            legend.position = "bottom", legend.box = "vertical") 
+            legend.position = "bottom", 
+            legend.box = "vertical") 
     print(full_plot)
   })
   
@@ -354,9 +358,10 @@ server <- function(input, output, session){
   
   
   output$icu_stays <- renderPlot({
-    ggplot(chartevents(), aes(x = charttime,
-                              y = valuenum, 
-                              color = abbreviation)) +
+    ggplot(chartevents(), 
+           aes(x = charttime,
+               y = valuenum, 
+               color = abbreviation)) +
       geom_point(size = 1.2) +
       geom_line() +
       facet_grid(rows = vars(abbreviation), 
