@@ -17,7 +17,7 @@ library(tidyverse)
 library(stringr)
 
 
-# connect to the BigQuery database `biostat-203b-2024-winter.mimic4_v2_2`
+
 con_bq <- dbConnect(
   bigrquery::bigquery(),
   project = "biostat-203b-2024-winter",
@@ -110,18 +110,25 @@ ui <- navbarPage(
   
   
   tabPanel("Patient's ADT and ICU stay information",
-           numericInput(inputId = "patient_id",
-                        label = "Input Patient ID",
-                        value = 10001217),
+           selectizeInput(inputId = "patient_id",
+                          label = "Input Patient ID",
+                          choices = NULL,
+                          options = list(placeholder = "Select a patient ID")),
            mainPanel(
              plotOutput("adt_history"),
              plotOutput("icu_stays")
            )
-)
+  )
 )
 
 # Define server
-server <- function(input, output){
+server <- function(input, output, session){
+  observe({
+    updateSelectizeInput(session, "patient_id", 
+                         choices = mimic_icu_cohort$subject_id, 
+                         server = TRUE) # Enable server-side selectize
+  })
+  
   
   # Reactive expression for selected demographic variable
   selected_var1 <- reactive({
@@ -140,20 +147,21 @@ server <- function(input, output){
     input$patient_id
   })
   
+  
   # Reactive expression for numeric summary
-
+  
   numeric_summary <- reactive({
-      summary_stats <- mimic_icu_cohort %>%
-        group_by_at(vars(selected_var1())) %>%
-        summarize(
-          mean_los = mean(los, na.rm = TRUE),
-          median_los = median(los, na.rm = TRUE),
-          min_los = min(los, na.rm = TRUE),
-          max_los = max(los, na.rm = TRUE),
-          sd_los = sd(los, na.rm = TRUE),
-          count = n()
-        )
-      return(summary_stats)
+    summary_stats <- mimic_icu_cohort %>%
+      group_by_at(vars(selected_var1())) %>%
+      summarize(
+        mean_los = mean(los, na.rm = TRUE),
+        median_los = median(los, na.rm = TRUE),
+        min_los = min(los, na.rm = TRUE),
+        max_los = max(los, na.rm = TRUE),
+        sd_los = sd(los, na.rm = TRUE),
+        count = n()
+      )
+    return(summary_stats)
   })
   
   
@@ -186,13 +194,13 @@ server <- function(input, output){
   output$lab_plot <- renderPlot({
     ggplot(mimic_icu_cohort,
            aes_string(x = selected_var2(), y = "los")) +
-    geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) +
-    labs(title = paste("Length of ICU stays vs 
+      geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) +
+      labs(title = paste("Length of ICU stays vs 
                        Last available lab measurements of", 
-                       input$lab_var, "before ICU stay"),
-         x = paste("Last available lab measurements of", 
-                   input$lab_var,  "before ICU stay"),
-         y = "Length of ICU stays (days)") 
+                         input$lab_var, "before ICU stay"),
+           x = paste("Last available lab measurements of", 
+                     input$lab_var,  "before ICU stay"),
+           y = "Length of ICU stays (days)") 
   })
   
   
@@ -210,45 +218,45 @@ server <- function(input, output){
   
   # Extract datasets and filter useful information
   patients <- reactive({tbl(con_bq, "patients") |>
-    filter(subject_id == !!patient_id()) |>
-    select(subject_id, gender, anchor_age, anchor_year)
+      filter(subject_id == as.integer(!!patient_id())) |>
+      select(subject_id, gender, anchor_age, anchor_year)
   })
   
   admissions <- reactive({tbl(con_bq, "admissions") |>
-    filter(subject_id == !!patient_id()) |>
-    select(subject_id, race)|>
-    distinct()
+      filter(subject_id == as.integer(!!patient_id())) |>
+      select(subject_id, race)|>
+      distinct()
   })
   
   adt <- reactive({
     tbl(con_bq, "transfers") |>
-      filter(subject_id == !!patient_id() 
+      filter(subject_id == as.integer(!!patient_id()) 
              & !is.na(intime) & !is.na(outtime) & !is.na(careunit)) |>
       select(intime, outtime, careunit)
   })
   
   lab <- reactive({tbl(con_bq, "labevents") |>
-    filter(subject_id == !!patient_id()) |>
-    select(charttime)|>
-    distinct()
+      filter(subject_id == as.integer(!!patient_id())) |>
+      select(charttime)|>
+      distinct()
   })
   
   procedures_icd <- reactive({tbl(con_bq, "procedures_icd") |>
-    filter(subject_id == !!patient_id()) |>
-    select(subject_id, seq_num, icd_code, chartdate)
+      filter(subject_id == as.integer(!!patient_id())) |>
+      select(subject_id, seq_num, icd_code, chartdate)
   })
   
   diagnoses_icd <- reactive({tbl(con_bq, "diagnoses_icd") |>
-    filter(subject_id == !!patient_id()) |>
-    select(subject_id, seq_num, icd_code)
+      filter(subject_id == as.integer(!!patient_id())) |>
+      select(subject_id, seq_num, icd_code)
   })
   
   d_icd_procedures <- reactive({tbl(con_bq, "d_icd_procedures") |>
-    select(icd_code, long_title)
+      select(icd_code, long_title)
   })
   
   d_icd_diagnoses <- reactive({tbl(con_bq, "d_icd_diagnoses") |>
-    select(icd_code, long_title)
+      select(icd_code, long_title)
   })
   
   diag_icd <- reactive({
@@ -292,10 +300,10 @@ server <- function(input, output){
     # Plot the first layer with ADT history.
     adt_plot <- blank_plot + 
       geom_segment(data = adt(), aes(x = intime,
-                                   xend = outtime,
-                                   y = "ADT", 
-                                   yend = "ADT",
-                                   color = careunit),
+                                     xend = outtime,
+                                     y = "ADT", 
+                                     yend = "ADT",
+                                     color = careunit),
                    linewidth = line_width(adt() %>% pull(careunit))) +
       guides(color = guide_legend(title = "Care Unit", ncol = 3, order = 1)) +
       theme(legend.position = "bottom") 
@@ -305,19 +313,19 @@ server <- function(input, output){
       geom_point(data = lab(), aes(x = charttime, y = "Lab"),
                  shape = 3, size = 2.5, color = "black") 
     
-  
+    
     full_plot <- lab_plot +
       geom_point(data = procedure(), aes(x = as.POSIXct(chartdate, 
-                                                      format="%Y-%m-%d"),
-                                       y = "Procedure", 
-                                       shape = str_sub(
-                                         procedure() %>% pull(long_title), 
-                                         1, 
-                                         35
+                                                        format="%Y-%m-%d"),
+                                         y = "Procedure", 
+                                         shape = str_sub(
+                                           procedure() %>% pull(long_title), 
+                                           1, 
+                                           35
                                          )
-                                       ),
-                 size = 4,
-                 color = "black") +
+      ),
+      size = 4,
+      color = "black") +
       guides(shape = guide_legend(title = "Procedure", 
                                   ncol = 3,
                                   order = 2, 
@@ -332,17 +340,18 @@ server <- function(input, output){
   
   
   d_items <- reactive({tbl(con_bq, "d_items") |>
-    filter(abbreviation %in% c("HR", "NBPd", "NBPs", "RR", "Temperature F")) |>
-    select(itemid, label, abbreviation)
+      filter(abbreviation %in% c("HR", "NBPd", 
+                                 "NBPs", "RR", "Temperature F")) |>
+      select(itemid, label, abbreviation)
   })
   
   chartevents <- reactive({tbl(con_bq, "chartevents") |>
-    filter(subject_id == !!patient_id()) |>
-    filter(itemid %in% c(220045, 220180, 220179, 223761, 220210)) |>
-    left_join(d_items(), by = "itemid") |>
-    select(subject_id, stay_id, charttime, valuenum, abbreviation)
+      filter(subject_id == as.integer(!!patient_id())) |>
+      filter(itemid %in% c(220045, 220180, 220179, 223761, 220210)) |>
+      left_join(d_items(), by = "itemid") |>
+      select(subject_id, stay_id, charttime, valuenum, abbreviation)
   })
-    
+  
   
   output$icu_stays <- renderPlot({
     ggplot(chartevents(), aes(x = charttime,
@@ -364,9 +373,10 @@ server <- function(input, output){
       theme(axis.text = element_text(size = 7.5)) +
       guides(color = "none")
   })
+  
 }
 
-  
+
 # Run the Shiny app
 shinyApp(ui, server)
 
