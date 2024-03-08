@@ -50,7 +50,7 @@ extract_before_comma <- function(x) {
 ui <- navbarPage(
   # Application title
   titlePanel("Summaries and Visualizations of ICU Cohort"),
-  h4("Author: Puyuan Liu"),
+  # h4("Author: Puyuan Liu"),
   tabPanel("Patients Characteristics",
            sidebarPanel(
              selectInput(
