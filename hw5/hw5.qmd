@@ -1,0 +1,451 @@
+---
+title: "Biostat 203B Homework 5"
+subtitle: Due Mar 22 @ 11:59PM
+author: "Puyuan Liu, 806152535"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: false
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+---
+
+## Predicting ICU duration
+
+Using the ICU cohort `mimiciv_icu_cohort.rds` you built in Homework 4, develop at least three machine learning approaches (logistic regression with enet regularization, random forest, boosting, SVM, MLP, etc) plus a model stacking approach for predicting whether a patient's ICU stay will be longer than 2 days. 
+You should use the `los_long` variable as the outcome. 
+Your algorithms can use patient demographic information (gender, age at ICU `intime`, marital status, race), ICU admission information (first care unit), the last lab measurements before the ICU stay, and first vital measurements during ICU stay as features. You are welcome to use any feature engineering techniques you think are appropriate; but make sure to not use features that are not available at an ICU stay's `intime`. For instance, `last_careunit` cannot be used in your algorithms. 
+
+1. Data preprocessing and feature engineering.
+
+```{r}
+library(tidyverse)
+library(readr)
+library(gtsummary)
+library(tidymodels)
+library(glmnet)
+library(ranger)
+library(keras)
+```
+
+```{r}
+icu_cohort <- read_rds("~/203b-hw/hw4/mimiciv_shiny/mimic_icu_cohort.rds")
+```
+
+```{r}
+# Define a function to check if the number of NA's in a column is greater than a threshold
+drop_cols_with_nas <- function(data, threshold) {
+  na_count <- sapply(data, function(col) sum(is.na(col)))
+  return(data[, na_count <= threshold])
+}
+
+# Define a function to removes out-liers based on IQR
+remove_outliers_iqr <- function(data_vector) {
+  # Calculate the first and third quartiles (Q1, Q3) and the IQR
+  quartiles <- quantile(data_vector, probs = c(0.25, 0.75), na.rm = TRUE)
+  iqr_value <- IQR(data_vector, na.rm = TRUE)
+  # Replace out-liers with NA
+  cleaned_vector <- dplyr::if_else(
+    data_vector < quartiles[1] - 1.5 * iqr_value | 
+    data_vector > quartiles[2] + 1.5 * iqr_value, 
+    NA, 
+    data_vector
+  )
+  # Return the vector with outliers replaced by NA
+  return(cleaned_vector)
+}
+
+
+
+# Data preprocessing and feature engineering
+mimic_icu_cohort <- icu_cohort |>
+  
+  # Select columns of interest
+  select(subject_id, hadm_id, stay_id, los_long, first_careunit,
+         marital_status, race, gender, age, 
+         Sodium, Chloride, Creatinine, Potassium, Glucose, Hematocrit, 
+         `White Blood Cells`, Bicarbonate,
+         `Temperature Fahrenheit`, `Non Invasive Blood Pressure diastolic`, 
+         `Respiratory Rate`, `Non Invasive Blood Pressure systolic`, 
+         `Heart Rate`)|>
+  
+  # Impute NA's in marital_status with  category "OTHER".
+  mutate(marital_status = replace(marital_status, 
+                                  is.na(marital_status),
+                                  "OTHER")) |>
+  
+  # Convert character and logical columns to factors
+  mutate_if(is.character, as.factor) |>
+  mutate_if(is.logical, as.factor) |>
+  
+  # Drop columns with more than 9000 NA's
+  drop_cols_with_nas(threshold = 9000) |>
+  
+  # Apply the remove_outliers_iqr function to numeric columns
+  mutate_if(is.numeric, remove_outliers_iqr) |>
+  
+  # Impute NA's in numerical columns with the median
+  mutate(across(where(is.numeric), 
+                ~if_else(is.na(.), 
+                         median(., na.rm = TRUE), .))) |>
+  print(width = Inf)
+```
+
+
+2. Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
+```{r}
+#| eval: false
+set.seed(203)
+
+# sort
+mimiciv_icu_cohort <- mimic_icu_cohort |>
+  arrange(subject_id, hadm_id, stay_id)|>
+  select(-c(subject_id, hadm_id, stay_id))
+
+data_split <- initial_split(
+  mimiciv_icu_cohort, 
+  # stratify by los_long
+  strata = "los_long", 
+  prop = 0.5
+  )
+```
+
+```{r}
+summary(mimiciv_icu_cohort)
+```
+
+```{r}
+icu_train <- training(data_split)
+dim(icu_train)
+```
+```{r}
+icu_test <- testing(data_split)
+dim(icu_test)
+```
+
+3. Train and tune the models using the training set.
+
+### Logistic regression with enet regularization
+```{r}
+logit_recipe <- 
+  recipe(
+    los_long ~ ., 
+    data = icu_train
+  ) |>
+  # create traditional dummy variables
+  step_dummy(all_nominal_predictors()) |>
+  # zero-variance filter
+  step_zv(all_numeric_predictors()) |> 
+  # center and scale numeric data
+  step_normalize(all_numeric_predictors()) |>
+  print()
+```
+
+```{r}
+# Models
+logit_mod <- 
+  logistic_reg(
+    penalty = tune(), 
+    mixture = tune()
+  ) |> 
+  set_engine("glmnet", standardize = FALSE) |>
+  print()
+```
+
+```{r}
+# Workflow
+logit_wf <- workflow() |>
+  add_recipe(logit_recipe) |>
+  add_model(logit_mod) |>
+  print()
+```
+
+```{r}
+# Tuning grid
+logit_param_grid <- grid_regular(
+  penalty(range = c(-6, 3)), 
+  mixture(),
+  levels = c(100, 5)
+  ) |>
+  print()
+```
+
+```{r}
+set.seed(203)
+
+folds <- vfold_cv(icu_train, v = 5)
+folds
+```
+
+```{r}
+# Fit cross-validation (logistic)
+(logit_fit <- logit_wf |>
+  tune_grid(
+    resamples = folds,
+    grid = logit_param_grid,
+    metrics = metric_set(roc_auc, accuracy)
+    )) |>
+  system.time()
+
+logit_fit
+```
+
+```{r}
+# Visualize CV results
+logit_fit |>
+  # aggregate metrics from K folds
+  collect_metrics() |>
+  print(width = Inf) |>
+  filter(.metric == "roc_auc") |>
+  ggplot(mapping = aes(x = penalty, y = mean, color = factor(mixture))) +
+  geom_point() +
+  labs(x = "Penalty", y = "CV AUC") +
+  scale_x_log10()
+```
+```{r}
+logit_fit |>
+  show_best("roc_auc")
+```
+
+```{r}
+best_logit <- logit_fit |>
+  select_best("roc_auc")
+best_logit
+```
+
+```{r}
+# Final workflow
+logit_final_wf <- logit_wf |>
+  finalize_workflow(best_logit)
+logit_final_wf
+```
+
+```{r}
+# Fit the whole training set, then predict the test cases
+logit_final_fit <- 
+  logit_final_wf |>
+  last_fit(data_split)
+logit_final_fit
+```
+```{r}
+# Test metrics
+logit_final_fit |> 
+  collect_metrics()
+```
+
+### Random forest
+
+```{r}
+rf_recipe <- 
+  recipe(
+    los_long ~ ., 
+    data = icu_train
+  ) |>
+  # zero-variance filter
+  step_zv(all_numeric_predictors()) |>
+  print()
+```
+
+```{r}
+# Model
+rf_mod <- 
+  rand_forest(
+    mode = "classification",
+    # Number of predictors randomly sampled in each split
+    mtry = tune(),
+    # Number of trees in ensemble
+    trees = tune()
+  ) |> 
+  set_engine("ranger") |>
+  print()
+```
+
+```{r}
+# Workflow
+rf_wf <- workflow() |>
+  add_recipe(rf_recipe) |>
+  add_model(rf_mod) |>
+  print()
+```
+
+```{r}
+# Tuning grid
+rf_param_grid <- grid_regular(
+  trees(range = c(400L, 600L)), 
+  mtry(range = c(1L, 5L)),
+  levels = c(3, 5)
+  )|>
+  print()
+```
+
+```{r}
+# Fit cross-validation (random forest)
+set.seed(203)
+(rf_fit <- rf_wf |>
+  tune_grid(
+    resamples = folds,
+    grid = rf_param_grid,
+    metrics = metric_set(roc_auc, accuracy)
+    )) |>
+  system.time()
+
+rf_fit
+```
+
+```{r}
+# Visualize CV results
+rf_fit |>
+  collect_metrics() |>
+  print(width = Inf) |>
+  filter(.metric == "roc_auc") |>
+  ggplot(mapping = aes(x = trees, y = mean, color = factor(mtry))) +
+  geom_point() + 
+  labs(x = "Num. of Trees", y = "CV AUC")
+```
+
+```{r}
+# Show the best 5 model
+rf_fit |>
+  show_best("roc_auc")
+```
+
+```{r}
+# Select the best model
+best_rf <- rf_fit |>
+  select_best("roc_auc")
+best_rf
+```
+
+```{r}
+# Final workflow
+rf_final_wf <- rf_wf |>
+  finalize_workflow(best_rf)
+rf_final_wf
+```
+
+```{r}
+# Fit the whole training set, then predict the test cases
+rf_final_fit <- 
+  rf_final_wf |>
+  last_fit(data_split)
+rf_final_fit
+```
+
+```{r}
+# Test metrics
+rf_final_fit |> 
+  collect_metrics()
+```
+
+
+### Multi-layer perceptron (MLP) 
+```{r}
+mlp_recipe <- 
+  recipe(
+    los_long ~ ., 
+    data = icu_train
+  ) |>
+  # create traditional dummy variables (necessary for svm)
+  step_dummy(all_nominal_predictors()) |>
+  # zero-variance filter
+  step_zv(all_numeric_predictors()) |>
+  # center and scale numeric data
+  step_normalize(all_numeric_predictors()) |>
+  print()
+```
+
+```{r}
+# Model
+mlp_mod <- 
+  mlp(
+    mode = "classification",
+    hidden_units = tune(),
+    dropout = tune(),
+    epochs = 50,
+  ) |> 
+  set_engine("keras", verbose = 0)
+mlp_mod
+```
+
+```{r}
+mlp_wf <- workflow() |>
+  add_recipe(mlp_recipe) |>
+  add_model(mlp_mod)
+mlp_wf
+```
+
+```{r}
+mlp_param_grid <- grid_regular(
+  hidden_units(range = c(5, 20)),
+  dropout(range = c(0, 0.6)),
+  levels = 4
+  )
+mlp_param_grid
+```
+
+```{r}
+(mlp_fit <- mlp_wf |>
+  tune_grid(
+    resamples = folds,
+    grid = mlp_param_grid,
+    metrics = metric_set(roc_auc, accuracy)
+    )) |>
+  system.time()
+
+mlp_fit
+```
+
+```{r}
+mlp_fit |>
+  collect_metrics() |>
+  print(width = Inf) |>
+  filter(.metric == "roc_auc") |>
+  ggplot(mapping = aes(x = dropout, y = mean, color = factor(hidden_units))) +
+  geom_point() +
+  labs(x = "Dropout Rate", y = "CV AUC") +
+  scale_x_log10()
+```
+
+```{r}
+# Show the best 5 model
+mlp_fit |>
+  show_best("roc_auc")
+```
+
+```{r}
+# Select the best model
+best_mlp <- mlp_fit |>
+  select_best("roc_auc")
+best_mlp
+```
+
+```{r}
+# Final workflow
+mlp_final_wf <- mlp_wf |>
+  finalize_workflow(best_mlp)
+mlp_final_wf
+```
+
+```{r}
+# Fit the whole training set, then predict the test cases
+mlp_final_fit <- 
+  mlp_final_wf |>
+  last_fit(data_split)
+mlp_final_fit
+```
+
+```{r}
+# Test metrics
+mlp_final_fit |> 
+  collect_metrics()
+```
+
+### Model stacking
+```{r}
+```
+4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
+
+
