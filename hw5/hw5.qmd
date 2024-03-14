@@ -29,6 +29,8 @@ library(tidymodels)
 library(glmnet)
 library(ranger)
 library(keras)
+library(xgboost)
+library(stacks)
 ```
 
 ```{r}
@@ -71,11 +73,6 @@ mimic_icu_cohort <- icu_cohort |>
          `Temperature Fahrenheit`, `Non Invasive Blood Pressure diastolic`, 
          `Respiratory Rate`, `Non Invasive Blood Pressure systolic`, 
          `Heart Rate`)|>
-  
-  # Impute NA's in marital_status with  category "OTHER".
-  mutate(marital_status = replace(marital_status, 
-                                  is.na(marital_status),
-                                  "OTHER")) |>
   
   # Convert character and logical columns to factors
   mutate_if(is.character, as.factor) |>
@@ -135,13 +132,15 @@ logit_recipe <-
     los_long ~ ., 
     data = icu_train
   ) |>
+  # mode imputation for categorical_var
+  step_impute_mode(all_nominal_predictors()) |>
   # create traditional dummy variables
   step_dummy(all_nominal_predictors()) |>
   # zero-variance filter
   step_zv(all_numeric_predictors()) |> 
   # center and scale numeric data
-  step_normalize(all_numeric_predictors()) |>
-  print()
+  step_normalize(all_numeric_predictors()) 
+logit_recipe
 ```
 
 ```{r}
@@ -151,16 +150,16 @@ logit_mod <-
     penalty = tune(), 
     mixture = tune()
   ) |> 
-  set_engine("glmnet", standardize = FALSE) |>
-  print()
+  set_engine("glmnet", standardize = FALSE) 
+logit_mod
 ```
 
 ```{r}
 # Workflow
 logit_wf <- workflow() |>
   add_recipe(logit_recipe) |>
-  add_model(logit_mod) |>
-  print()
+  add_model(logit_mod) 
+logit_wf
 ```
 
 ```{r}
@@ -169,8 +168,8 @@ logit_param_grid <- grid_regular(
   penalty(range = c(-6, 3)), 
   mixture(),
   levels = c(100, 5)
-  ) |>
-  print()
+  ) 
+logit_param_grid
 ```
 
 ```{r}
@@ -244,9 +243,11 @@ rf_recipe <-
     los_long ~ ., 
     data = icu_train
   ) |>
+  # mode imputation for categorical_var
+  step_impute_mode(all_nominal_predictors()) |>
   # zero-variance filter
-  step_zv(all_numeric_predictors()) |>
-  print()
+  step_zv(all_numeric_predictors()) 
+rf_recipe
 ```
 
 ```{r}
@@ -259,26 +260,26 @@ rf_mod <-
     # Number of trees in ensemble
     trees = tune()
   ) |> 
-  set_engine("ranger") |>
-  print()
+  set_engine("ranger") 
+rf_mod
 ```
 
 ```{r}
 # Workflow
 rf_wf <- workflow() |>
   add_recipe(rf_recipe) |>
-  add_model(rf_mod) |>
-  print()
+  add_model(rf_mod) 
+rf_wf
 ```
 
 ```{r}
 # Tuning grid
 rf_param_grid <- grid_regular(
-  trees(range = c(400L, 600L)), 
-  mtry(range = c(1L, 5L)),
-  levels = c(3, 5)
-  )|>
-  print()
+  trees(range = c(450L, 650L)), 
+  mtry(range = c(1L, 3L)),
+  levels = c(5, 3)
+  )
+rf_param_grid
 ```
 
 ```{r}
@@ -340,6 +341,111 @@ rf_final_fit |>
   collect_metrics()
 ```
 
+
+### Boosting
+```{r}
+boost_recipe <- 
+  recipe(
+    los_long ~ ., 
+    data = icu_train
+  ) |>
+  # mode imputation for categorical_var
+  step_impute_mode(all_nominal_predictors()) |>
+  # create traditional dummy variables (necessary for xgboost)
+  step_dummy(all_nominal_predictors()) |>
+  # zero-variance filter
+  step_zv(all_numeric_predictors()) 
+boost_recipe
+```
+
+```{r}
+# Model
+boost_mod <- 
+  boost_tree(
+    mode = "classification",
+    trees = 1000,
+    tree_depth = tune(),
+    learn_rate = tune()
+  ) |> 
+  set_engine("xgboost") 
+boost_mod
+```
+
+```{r}
+# Workflow
+boost_wf <- workflow() |>
+  add_recipe(boost_recipe) |>
+  add_model(boost_mod)
+boost_wf
+```
+
+```{r}
+# Tuning grid
+boost_param_grid <- grid_regular(
+  tree_depth(range = c(1L, 3L)),
+  learn_rate(range = c(-3, 0), trans = log10_trans()),
+  levels = c(3, 6)
+  )
+boost_param_grid
+```
+
+```{r}
+# Fit cross-validation (boosting)
+(boost_fit <- boost_wf |>
+  tune_grid(
+    resamples = folds,
+    grid = boost_param_grid,
+    metrics = metric_set(roc_auc, accuracy)
+    )) |>
+  system.time()
+boost_fit
+```
+
+```{r}
+# Visualize CV results
+boost_fit |>
+  collect_metrics() |>
+  print(width = Inf) |>
+  filter(.metric == "roc_auc") |>
+  ggplot(mapping = aes(x = learn_rate, y = mean, color = factor(tree_depth))) +
+  geom_point() + 
+  labs(x = "Learning Rate", y = "CV AUC") +
+  scale_x_log10()
+```
+
+```{r}
+# Show the best 5 model
+boost_fit |>
+  show_best("roc_auc")
+```
+
+```{r}
+# Select the best model
+best_boost <- boost_fit |>
+  select_best("roc_auc")
+best_boost
+```
+
+```{r}
+# Final workflow
+boost_final_wf <- boost_wf |>
+  finalize_workflow(best_boost)
+boost_final_wf
+```
+
+```{r}
+# Fit the whole training set, then predict the test cases
+boost_final_fit <- 
+  boost_final_wf |>
+  last_fit(data_split)
+boost_final_fit
+```
+
+```{r}
+# Test metrics
+boost_final_fit |> 
+  collect_metrics()
+```
 
 ### Multi-layer perceptron (MLP) 
 ```{r}
@@ -445,7 +551,85 @@ mlp_final_fit |>
 
 ### Model stacking
 ```{r}
+stack_recipe <- 
+  recipe(
+    los_long ~ ., 
+    data = icu_train
+  ) |>
+  # mode imputation for categorical_var
+  step_impute_mode(all_nominal_predictors()) |>
+  # create traditional dummy variables (necessary for svm)
+  step_dummy(all_nominal_predictors()) |>
+  # zero-variance filter
+  step_zv(all_numeric_predictors()) |>
+  # center and scale numeric data
+  step_normalize(all_numeric_predictors()) 
+stack_recipe
 ```
+
+```{r}
+logit_res <- 
+  tune_grid(
+    object = logit_wf, 
+    resamples = folds, 
+    grid = logit_param_grid,
+    control = control_stack_grid()
+  )
+logit_res
+```
+```{r}
+rf_res <- 
+  tune_grid(
+    object = rf_wf, 
+    resamples = folds, 
+    grid = rf_param_grid,
+    control = control_stack_grid()
+  )
+rf_res
+```
+
+```{r}
+boost_res <- 
+  tune_grid(
+    object = boost_wf, 
+    resamples = folds, 
+    grid = boost_param_grid,
+    control = control_stack_grid()
+  )
+boost_res
+```
+
+```{r}
+# Model stacking
+icu_model_st <- 
+  # initialize the stack
+  stacks() |>
+  # add candidate members
+  add_candidates(logit_res) |>
+  add_candidates(rf_res) |>
+  add_candidates(boost_res) |>
+  # determine how to combine their predictions
+  blend_predictions(
+    penalty = 10^(-6:2),
+    metrics = c("roc_auc")
+    ) |>
+  # fit the candidates with nonzero stacking coefficients
+  fit_members()
+```
+
+
+```{r}
+icu_model_st
+```
+
+```{r}
+autoplot(icu_model_st)
+```
+
+```{r}
+autoplot(icu_model_st, type = members)
+```
+
 4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
 
 
