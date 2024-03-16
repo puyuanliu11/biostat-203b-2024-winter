@@ -1,0 +1,148 @@
+
+# Logistic regression with enet regularization
+
+```{r}
+library(tidyverse)
+library(readr)
+library(gtsummary)
+library(tidymodels)
+library(glmnet)
+library(vip)
+```
+
+```{r}
+data_split <- readRDS("data_split.rds")
+```
+
+```{r}
+icu_train <- training(data_split)
+dim(icu_train)
+```
+```{r}
+icu_test <- testing(data_split)
+dim(icu_test)
+```
+
+```{r}
+logit_recipe <- 
+  recipe(
+    los_long ~ ., 
+    data = icu_train
+  ) |>
+  # mode imputation for categorical_var
+  step_impute_mode(all_nominal_predictors()) |>
+  # create traditional dummy variables
+  step_dummy(all_nominal_predictors()) |>
+  # zero-variance filter
+  step_zv(all_numeric_predictors()) |> 
+  # center and scale numeric data
+  step_normalize(all_numeric_predictors()) 
+logit_recipe
+```
+
+
+```{r}
+# Models
+logit_mod <- 
+  logistic_reg(
+    penalty = tune(), 
+    mixture = tune()
+  ) |> 
+  set_engine("glmnet", standardize = FALSE) 
+logit_mod
+```
+
+```{r}
+# Workflow
+logit_wf <- workflow() |>
+  add_recipe(logit_recipe) |>
+  add_model(logit_mod) 
+logit_wf
+```
+
+```{r}
+# Tuning grid
+logit_param_grid <- grid_regular(
+  penalty(range = c(-6, 3)), 
+  mixture(),
+  levels = c(100, 5)
+  ) 
+logit_param_grid
+```
+
+```{r}
+set.seed(203)
+
+folds <- vfold_cv(icu_train, v = 4)
+folds
+```
+
+```{r}
+# Fit cross-validation (logistic)
+(logit_fit <- logit_wf |>
+  tune_grid(
+    resamples = folds,
+    grid = logit_param_grid,
+    metrics = metric_set(roc_auc, accuracy)
+    )) |>
+  system.time()
+
+logit_fit
+```
+
+```{r}
+# Visualize CV results
+logit_fit |>
+  # aggregate metrics from K folds
+  collect_metrics() |>
+  print(width = Inf) |>
+  filter(.metric == "roc_auc") |>
+  ggplot(mapping = aes(x = penalty, y = mean, color = factor(mixture))) +
+  geom_point() +
+  labs(x = "Penalty", y = "CV AUC") +
+  scale_x_log10()
+```
+```{r}
+logit_fit |>
+  show_best("roc_auc")
+```
+
+```{r}
+best_logit <- logit_fit |>
+  select_best("roc_auc")
+best_logit
+```
+
+```{r}
+# Final workflow
+logit_final_wf <- logit_wf |>
+  finalize_workflow(best_logit)
+logit_final_wf
+```
+
+```{r}
+# Fit the whole training set, then predict the test cases
+logit_final_fit <- 
+  logit_final_wf |>
+  last_fit(data_split)
+logit_final_fit
+```
+
+
+```{r}
+# Test metrics
+logit_final_fit |> 
+  collect_metrics()
+```
+
+```{r}
+# Extract important features
+logit_features <- extract_fit_engine(logit_final_fit) |>
+  vip(num_features = 6)
+logit_features
+```
+
+```{r save-workspace}
+saveRDS(object = logit_wf, file = "logit_wf.rds")
+saveRDS(object = logit_param_grid, file = "logit_param_grid.rds")
+```
