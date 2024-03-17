@@ -7,6 +7,7 @@ library(gtsummary)
 library(tidymodels)
 library(ranger)
 library(vip)
+library(stacks)
 ```
 
 ```{r}
@@ -70,23 +71,28 @@ rf_param_grid
 ```{r}
 set.seed(203)
 
-folds <- vfold_cv(icu_train, v = 4)
+folds <- vfold_cv(icu_train, v = 3)
 folds
 ```
 
 ```{r}
-# Fit cross-validation (random forest)
+# Fit cross-validation (boosting)
 set.seed(203)
-(rf_fit <- rf_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = rf_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
-
+if (file.exists("rf_fit.rds")) {
+  rf_fit <- read_rds("rf_fit.rds")
+} else {
+  rf_fit <- rf_wf |>
+    tune_grid(
+      resamples = folds,
+      grid = rf_param_grid,
+      metrics = metric_set(roc_auc, accuracy),
+      control = control_stack_grid()
+      )
+  write_rds(rf_fit, "rf_fit.rds")
+}
 rf_fit
 ```
+
 
 ```{r}
 # Visualize CV results
@@ -121,9 +127,14 @@ rf_final_wf
 
 ```{r}
 # Fit the whole training set, then predict the test cases
-rf_final_fit <- 
-  rf_final_wf |>
-  last_fit(data_split)
+if (file.exists("rf_final_fit.rds")) {
+  rf_final_fit <- read_rds("rf_final_fit.rds")
+} else {
+  rf_final_fit <- rf_final_wf |>
+    last_fit(data_split)
+  write_rds(rf_final_fit, "rf_final_fit.rds")
+}
+
 rf_final_fit
 ```
 
@@ -140,7 +151,3 @@ rf_features <- extract_fit_engine(rf_final_fit) |>
 rf_features
 ```
 
-```{r save-workspace}
-saveRDS(object = rf_wf, file = "rf_wf.rds")
-saveRDS(object = rf_param_grid, file = "rf_param_grid.rds")
-```
