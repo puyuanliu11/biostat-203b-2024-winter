@@ -7,6 +7,7 @@ library(gtsummary)
 library(tidymodels)
 library(xgboost)
 library(vip)
+library(stacks)
 ```
 
 ```{r}
@@ -72,20 +73,25 @@ boost_param_grid
 ```{r}
 set.seed(203)
 
-folds <- vfold_cv(icu_train, v = 4)
+folds <- vfold_cv(icu_train, v = 3)
 folds
 ```
 
 ```{r}
 # Fit cross-validation (boosting)
 set.seed(203)
-(boost_fit <- boost_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = boost_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
+if (file.exists("boost_fit.rds")) {
+  boost_fit <- read_rds("boost_fit.rds")
+} else {
+  boost_fit <- boost_wf |>
+    tune_grid(
+      resamples = folds,
+      grid = boost_param_grid,
+      metrics = metric_set(roc_auc, accuracy),
+      control = control_stack_grid()
+      ) 
+  write_rds(boost_fit, "boost_fit.rds")
+}
 boost_fit
 ```
 
@@ -123,9 +129,13 @@ boost_final_wf
 
 ```{r}
 # Fit the whole training set, then predict the test cases
-boost_final_fit <- 
-  boost_final_wf |>
-  last_fit(data_split)
+if (file.exists("boost_final_fit.rds")) {
+  boost_final_fit <- read_rds("boost_final_fit.rds")
+} else {
+  boost_final_fit <- boost_final_wf |>
+    last_fit(data_split) |>
+    write_rds("boost_final_fit.rds")
+}
 boost_final_fit
 ```
 
@@ -140,9 +150,4 @@ boost_final_fit |>
 boost_features <- extract_fit_engine(boost_final_fit) |>
   vip(num_features = 6)
 boost_features
-```
-
-```{r save-workspace}
-saveRDS(object = boost_wf, file = "boost_wf.rds")
-saveRDS(object = boost_param_grid, file = "boost_param_grid.rds")
 ```

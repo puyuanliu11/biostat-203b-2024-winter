@@ -8,6 +8,7 @@ library(gtsummary)
 library(tidymodels)
 library(glmnet)
 library(vip)
+library(stacks)
 ```
 
 ```{r}
@@ -73,20 +74,24 @@ logit_param_grid
 ```{r}
 set.seed(203)
 
-folds <- vfold_cv(icu_train, v = 4)
+folds <- vfold_cv(icu_train, v = 3)
 folds
 ```
 
 ```{r}
 # Fit cross-validation (logistic)
-(logit_fit <- logit_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = logit_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
-
+if (file.exists("logit_fit.rds")) {
+  logit_fit <- read_rds("logit_fit.rds")
+} else {
+  logit_fit <- logit_wf |>
+    tune_grid(
+      resamples = folds,
+      grid = logit_param_grid,
+      metrics = metric_set(roc_auc, accuracy),
+      control = control_stack_grid()
+      ) 
+  write_rds(logit_fit, "logit_fit.rds")
+}
 logit_fit
 ```
 
@@ -95,7 +100,7 @@ logit_fit
 logit_fit |>
   # aggregate metrics from K folds
   collect_metrics() |>
-  print(width = Inf) |>
+  #print(width = Inf) |>
   filter(.metric == "roc_auc") |>
   ggplot(mapping = aes(x = penalty, y = mean, color = factor(mixture))) +
   geom_point() +
@@ -122,9 +127,13 @@ logit_final_wf
 
 ```{r}
 # Fit the whole training set, then predict the test cases
-logit_final_fit <- 
-  logit_final_wf |>
-  last_fit(data_split)
+if (file.exists("logit_final_fit.rds")) {
+  logit_final_fit <- read_rds("logit_final_fit.rds")
+} else {
+  logit_final_fit <- logit_final_wf |>
+    last_fit(data_split) |>
+    write_rds("logit_final_fit.rds")
+}
 logit_final_fit
 ```
 
@@ -142,7 +151,3 @@ logit_features <- extract_fit_engine(logit_final_fit) |>
 logit_features
 ```
 
-```{r save-workspace}
-saveRDS(object = logit_wf, file = "logit_wf.rds")
-saveRDS(object = logit_param_grid, file = "logit_param_grid.rds")
-```
