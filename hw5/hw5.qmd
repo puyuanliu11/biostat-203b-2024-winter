@@ -28,9 +28,9 @@ library(gtsummary)
 library(tidymodels)
 library(glmnet)
 library(ranger)
-library(keras)
 library(xgboost)
 library(stacks)
+library(vip)
 ```
 
 ```{r}
@@ -38,12 +38,6 @@ icu_cohort <- read_rds("~/203b-hw/hw4/mimiciv_shiny/mimic_icu_cohort.rds")
 ```
 
 ```{r}
-# Define a function to check if the number of NA's in a column is greater than a threshold
-drop_cols_with_nas <- function(data, threshold) {
-  na_count <- sapply(data, function(col) sum(is.na(col)))
-  return(data[, na_count <= threshold])
-}
-
 # Define a function to removes out-liers based on IQR
 remove_outliers_iqr <- function(data_vector) {
   # Calculate the first and third quartiles (Q1, Q3) and the IQR
@@ -61,13 +55,12 @@ remove_outliers_iqr <- function(data_vector) {
 }
 
 
-
 # Data preprocessing and feature engineering
 mimic_icu_cohort <- icu_cohort |>
   
   # Select columns of interest
-  select(subject_id, hadm_id, stay_id, los_long, first_careunit,
-         marital_status, race, gender, age, 
+  select(subject_id, hadm_id, stay_id, los_long, first_careunit, admission_type,
+         marital_status, race, gender, age, insurance, 
          Sodium, Chloride, Creatinine, Potassium, Glucose, Hematocrit, 
          `White Blood Cells`, Bicarbonate,
          `Temperature Fahrenheit`, `Non Invasive Blood Pressure diastolic`, 
@@ -77,9 +70,6 @@ mimic_icu_cohort <- icu_cohort |>
   # Convert character and logical columns to factors
   mutate_if(is.character, as.factor) |>
   mutate_if(is.logical, as.factor) |>
-  
-  # Drop columns with more than 9000 NA's
-  drop_cols_with_nas(threshold = 9000) |>
   
   # Apply the remove_outliers_iqr function to numeric columns
   mutate_if(is.numeric, remove_outliers_iqr) |>
@@ -94,7 +84,6 @@ mimic_icu_cohort <- icu_cohort |>
 
 2. Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
 ```{r}
-#| eval: false
 set.seed(203)
 
 # sort
@@ -123,9 +112,16 @@ icu_test <- testing(data_split)
 dim(icu_test)
 ```
 
+```{r}
+data_split |>
+  write_rds("data_split.rds", compress = "gz")
+```
+
+
 3. Train and tune the models using the training set.
 
 ### Logistic regression with enet regularization
+
 ```{r}
 logit_recipe <- 
   recipe(
@@ -142,6 +138,7 @@ logit_recipe <-
   step_normalize(all_numeric_predictors()) 
 logit_recipe
 ```
+
 
 ```{r}
 # Models
@@ -165,9 +162,9 @@ logit_wf
 ```{r}
 # Tuning grid
 logit_param_grid <- grid_regular(
-  penalty(range = c(-6, 3)), 
+  penalty(range = c(-2.5, -2)), 
   mixture(),
-  levels = c(100, 5)
+  levels = c(5, 2)
   ) 
 logit_param_grid
 ```
@@ -175,20 +172,24 @@ logit_param_grid
 ```{r}
 set.seed(203)
 
-folds <- vfold_cv(icu_train, v = 5)
+folds <- vfold_cv(icu_train, v = 3)
 folds
 ```
 
 ```{r}
 # Fit cross-validation (logistic)
-(logit_fit <- logit_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = logit_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
-
+if (file.exists("logit_fit.rds")) {
+  logit_fit <- read_rds("logit_fit.rds")
+} else {
+  logit_fit <- logit_wf |>
+    tune_grid(
+      resamples = folds,
+      grid = logit_param_grid,
+      metrics = metric_set(roc_auc, accuracy),
+      control = control_stack_grid()
+      ) 
+  write_rds(logit_fit, "logit_fit.rds")
+}
 logit_fit
 ```
 
@@ -197,7 +198,7 @@ logit_fit
 logit_fit |>
   # aggregate metrics from K folds
   collect_metrics() |>
-  print(width = Inf) |>
+  #print(width = Inf) |>
   filter(.metric == "roc_auc") |>
   ggplot(mapping = aes(x = penalty, y = mean, color = factor(mixture))) +
   geom_point() +
@@ -224,16 +225,22 @@ logit_final_wf
 
 ```{r}
 # Fit the whole training set, then predict the test cases
-logit_final_fit <- 
-  logit_final_wf |>
-  last_fit(data_split)
+if (file.exists("logit_final_fit.rds")) {
+  logit_final_fit <- read_rds("logit_final_fit.rds")
+} else {
+  logit_final_fit <- logit_final_wf |>
+    last_fit(data_split) |>
+    write_rds("logit_final_fit.rds")
+}
 logit_final_fit
 ```
+
 ```{r}
 # Test metrics
 logit_final_fit |> 
   collect_metrics()
 ```
+
 
 ### Random forest
 
@@ -260,7 +267,7 @@ rf_mod <-
     # Number of trees in ensemble
     trees = tune()
   ) |> 
-  set_engine("ranger") 
+  set_engine("ranger", importance = "impurity") 
 rf_mod
 ```
 
@@ -275,24 +282,28 @@ rf_wf
 ```{r}
 # Tuning grid
 rf_param_grid <- grid_regular(
-  trees(range = c(450L, 650L)), 
+  trees(range = c(400L, 600L)), 
   mtry(range = c(1L, 3L)),
-  levels = c(5, 3)
+  levels = c(3, 3)
   )
 rf_param_grid
 ```
 
 ```{r}
-# Fit cross-validation (random forest)
+# Fit cross-validation (boosting)
 set.seed(203)
-(rf_fit <- rf_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = rf_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
-
+if (file.exists("rf_fit.rds")) {
+  rf_fit <- read_rds("rf_fit.rds")
+} else {
+  rf_fit <- rf_wf |>
+    tune_grid(
+      resamples = folds,
+      grid = rf_param_grid,
+      metrics = metric_set(roc_auc, accuracy),
+      control = control_stack_grid()
+      )
+  write_rds(rf_fit, "rf_fit.rds")
+}
 rf_fit
 ```
 
@@ -329,9 +340,14 @@ rf_final_wf
 
 ```{r}
 # Fit the whole training set, then predict the test cases
-rf_final_fit <- 
-  rf_final_wf |>
-  last_fit(data_split)
+if (file.exists("rf_final_fit.rds")) {
+  rf_final_fit <- read_rds("rf_final_fit.rds")
+} else {
+  rf_final_fit <- rf_final_wf |>
+    last_fit(data_split)
+  write_rds(rf_final_fit, "rf_final_fit.rds")
+}
+
 rf_final_fit
 ```
 
@@ -341,8 +357,8 @@ rf_final_fit |>
   collect_metrics()
 ```
 
-
 ### Boosting
+
 ```{r}
 boost_recipe <- 
   recipe(
@@ -363,7 +379,7 @@ boost_recipe
 boost_mod <- 
   boost_tree(
     mode = "classification",
-    trees = 1000,
+    trees = 400,
     tree_depth = tune(),
     learn_rate = tune()
   ) |> 
@@ -382,22 +398,28 @@ boost_wf
 ```{r}
 # Tuning grid
 boost_param_grid <- grid_regular(
-  tree_depth(range = c(1L, 3L)),
-  learn_rate(range = c(-3, 0), trans = log10_trans()),
-  levels = c(3, 6)
+  tree_depth(range = c(2L, 3L)),
+  learn_rate(range = c(-2, 0), trans = log10_trans()),
+  levels = c(2, 5)
   )
 boost_param_grid
 ```
 
 ```{r}
 # Fit cross-validation (boosting)
-(boost_fit <- boost_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = boost_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
+set.seed(203)
+if (file.exists("boost_fit.rds")) {
+  boost_fit <- read_rds("boost_fit.rds")
+} else {
+  boost_fit <- boost_wf |>
+    tune_grid(
+      resamples = folds,
+      grid = boost_param_grid,
+      metrics = metric_set(roc_auc, accuracy),
+      control = control_stack_grid()
+      ) 
+  write_rds(boost_fit, "boost_fit.rds")
+}
 boost_fit
 ```
 
@@ -435,9 +457,13 @@ boost_final_wf
 
 ```{r}
 # Fit the whole training set, then predict the test cases
-boost_final_fit <- 
-  boost_final_wf |>
-  last_fit(data_split)
+if (file.exists("boost_final_fit.rds")) {
+  boost_final_fit <- read_rds("boost_final_fit.rds")
+} else {
+  boost_final_fit <- boost_final_wf |>
+    last_fit(data_split) |>
+    write_rds("boost_final_fit.rds")
+}
 boost_final_fit
 ```
 
@@ -447,109 +473,8 @@ boost_final_fit |>
   collect_metrics()
 ```
 
-### Multi-layer perceptron (MLP) 
-```{r}
-mlp_recipe <- 
-  recipe(
-    los_long ~ ., 
-    data = icu_train
-  ) |>
-  # create traditional dummy variables (necessary for svm)
-  step_dummy(all_nominal_predictors()) |>
-  # zero-variance filter
-  step_zv(all_numeric_predictors()) |>
-  # center and scale numeric data
-  step_normalize(all_numeric_predictors()) |>
-  print()
-```
-
-```{r}
-# Model
-mlp_mod <- 
-  mlp(
-    mode = "classification",
-    hidden_units = tune(),
-    dropout = tune(),
-    epochs = 50,
-  ) |> 
-  set_engine("keras", verbose = 0)
-mlp_mod
-```
-
-```{r}
-mlp_wf <- workflow() |>
-  add_recipe(mlp_recipe) |>
-  add_model(mlp_mod)
-mlp_wf
-```
-
-```{r}
-mlp_param_grid <- grid_regular(
-  hidden_units(range = c(5, 20)),
-  dropout(range = c(0, 0.6)),
-  levels = 4
-  )
-mlp_param_grid
-```
-
-```{r}
-(mlp_fit <- mlp_wf |>
-  tune_grid(
-    resamples = folds,
-    grid = mlp_param_grid,
-    metrics = metric_set(roc_auc, accuracy)
-    )) |>
-  system.time()
-
-mlp_fit
-```
-
-```{r}
-mlp_fit |>
-  collect_metrics() |>
-  print(width = Inf) |>
-  filter(.metric == "roc_auc") |>
-  ggplot(mapping = aes(x = dropout, y = mean, color = factor(hidden_units))) +
-  geom_point() +
-  labs(x = "Dropout Rate", y = "CV AUC") +
-  scale_x_log10()
-```
-
-```{r}
-# Show the best 5 model
-mlp_fit |>
-  show_best("roc_auc")
-```
-
-```{r}
-# Select the best model
-best_mlp <- mlp_fit |>
-  select_best("roc_auc")
-best_mlp
-```
-
-```{r}
-# Final workflow
-mlp_final_wf <- mlp_wf |>
-  finalize_workflow(best_mlp)
-mlp_final_wf
-```
-
-```{r}
-# Fit the whole training set, then predict the test cases
-mlp_final_fit <- 
-  mlp_final_wf |>
-  last_fit(data_split)
-mlp_final_fit
-```
-
-```{r}
-# Test metrics
-mlp_final_fit |> 
-  collect_metrics()
-```
-
 ### Model stacking
+
 ```{r}
 stack_recipe <- 
   recipe(
@@ -568,55 +493,28 @@ stack_recipe
 ```
 
 ```{r}
-logit_res <- 
-  tune_grid(
-    object = logit_wf, 
-    resamples = folds, 
-    grid = logit_param_grid,
-    control = control_stack_grid()
-  )
-logit_res
-```
-```{r}
-rf_res <- 
-  tune_grid(
-    object = rf_wf, 
-    resamples = folds, 
-    grid = rf_param_grid,
-    control = control_stack_grid()
-  )
-rf_res
-```
-
-```{r}
-boost_res <- 
-  tune_grid(
-    object = boost_wf, 
-    resamples = folds, 
-    grid = boost_param_grid,
-    control = control_stack_grid()
-  )
-boost_res
-```
-
-```{r}
 # Model stacking
-icu_model_st <- 
-  # initialize the stack
-  stacks() |>
-  # add candidate members
-  add_candidates(logit_res) |>
-  add_candidates(rf_res) |>
-  add_candidates(boost_res) |>
-  # determine how to combine their predictions
-  blend_predictions(
-    penalty = 10^(-6:2),
-    metrics = c("roc_auc")
-    ) |>
-  # fit the candidates with nonzero stacking coefficients
-  fit_members()
+if (!file.exists("icu_model_st.rds")) {
+  icu_model_st <- 
+    # initialize the stack
+    stacks() |>
+    # add candidate members
+    add_candidates(logit_fit) |>
+    add_candidates(rf_fit) |>
+    add_candidates(boost_fit) |>
+    # determine how to combine their predictions
+    blend_predictions(
+      penalty = 10^(-4:-1),
+      metrics = c("roc_auc"),
+      times = 3
+      ) |>
+    # fit the candidates with nonzero stacking coefficients
+    fit_members()
+  saveRDS(icu_model_st, "icu_model_st.rds")
+} else {
+  icu_model_st <- read_rds("icu_model_st.rds")
+}
 ```
-
 
 ```{r}
 icu_model_st
@@ -627,9 +525,94 @@ autoplot(icu_model_st)
 ```
 
 ```{r}
-autoplot(icu_model_st, type = members)
+# To see the top results
+autoplot(icu_model_st, type = "weights")
+```
+
+```{r}
+# To identify which model configurations were assigned what stacking coefficients
+collect_parameters(icu_model_st, "rf_fit")
+```
+```{r}
+collect_parameters(icu_model_st, "logit_fit")
+```
+
+```{r}
+collect_parameters(icu_model_st, "boost_fit")
+```
+
+```{r}
+# Final classfication for stacking method
+stack_icu_pred <- icu_test %>%
+  bind_cols(predict(icu_model_st, ., type = "prob")) %>%
+  print(width = Inf)
 ```
 
 4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
+
+```{r}
+# Test metrics for logistic regression model
+logit_final_fit |> 
+  collect_metrics()
+```
+
+```{r}
+# Test metrics for random forest model
+rf_final_fit |> 
+  collect_metrics()
+```
+
+```{r}
+# Test metrics for boosting model
+boost_final_fit |> 
+  collect_metrics()
+```
+
+```{r}
+# Convert prediction estimates to factor based on the chosen threshold
+stack_icu_pred <- stack_icu_pred %>%
+  mutate(
+    .pred_class = if_else(.pred_FALSE >= 0.5, "FALSE", "TRUE"),
+    .pred_class = factor(.pred_class, levels = c("FALSE", "TRUE"))
+  )
+
+# Test metrics for stacking model
+roc_auc_value <- yardstick::roc_auc(
+  stack_icu_pred,
+  truth = los_long,
+  contains(".pred_FALSE")
+)
+
+accuracy_value <- yardstick::accuracy(
+  stack_icu_pred,
+  truth = los_long,
+  estimate = .pred_class
+)
+
+# Print both metrics
+print(roc_auc_value)
+print(accuracy_value)
+```
+
+```{r}
+# Extract important features for logistics regression model 
+logit_features <- extract_fit_engine(logit_final_fit) |>
+  vip(num_features = 6)
+logit_features
+```
+
+```{r}
+# Extract important features for random forest model
+rf_features <- extract_fit_engine(rf_final_fit) |>
+  vip(num_features = 6)
+rf_features
+```
+
+```{r}
+# Extract important features for boosting model
+boost_features <- extract_fit_engine(boost_final_fit) |>
+  vip(num_features = 6)
+boost_features
+```
 
 
