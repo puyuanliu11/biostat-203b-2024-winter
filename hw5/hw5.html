@@ -3104,7 +3104,7 @@ vertical-align: -.125em;
 <span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>         <span class="st">`</span><span class="at">White Blood Cells</span><span class="st">`</span>, Bicarbonate,</span>
 <span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>         <span class="st">`</span><span class="at">Temperature Fahrenheit</span><span class="st">`</span>, <span class="st">`</span><span class="at">Non Invasive Blood Pressure diastolic</span><span class="st">`</span>, </span>
 <span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>         <span class="st">`</span><span class="at">Respiratory Rate</span><span class="st">`</span>, <span class="st">`</span><span class="at">Non Invasive Blood Pressure systolic</span><span class="st">`</span>, </span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>         <span class="st">`</span><span class="at">Heart Rate</span><span class="st">`</span>)<span class="sc">|&gt;</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>         <span class="st">`</span><span class="at">Heart Rate</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
 <span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>  </span>
 <span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Convert character and logical columns to factors</span></span>
 <span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate_if</span>(is.character, as.factor) <span class="sc">|&gt;</span></span>
@@ -3204,7 +3204,7 @@ vertical-align: -.125em;
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># sort</span></span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>mimiciv_icu_cohort <span class="ot">&lt;-</span> mimic_icu_cohort <span class="sc">|&gt;</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(subject_id, hadm_id, stay_id)<span class="sc">|&gt;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(subject_id, hadm_id, stay_id) <span class="sc">|&gt;</span></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span><span class="fu">c</span>(subject_id, hadm_id, stay_id))</span>
 <span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>data_split <span class="ot">&lt;-</span> <span class="fu">initial_split</span>(</span>
@@ -4392,7 +4392,7 @@ The 10 highest weighted member classes are:</code></pre>
 <p><strong>Interpretation:</strong> Boosting shows an AUC of 0.626 and an accuracy of 59%, performing better than logistic regression and slightly worse than random forest. It is also less interpretable due to its complexity.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb129"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb129-1"><a href="#cb129-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert prediction estimates to factor based on the chosen threshold</span></span>
-<span id="cb129-2"><a href="#cb129-2" aria-hidden="true" tabindex="-1"></a>stack_icu_pred <span class="ot">&lt;-</span> stack_icu_pred <span class="sc">%&gt;%</span></span>
+<span id="cb129-2"><a href="#cb129-2" aria-hidden="true" tabindex="-1"></a>stack_icu_pred <span class="ot">&lt;-</span> stack_icu_pred <span class="sc">|&gt;</span></span>
 <span id="cb129-3"><a href="#cb129-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
 <span id="cb129-4"><a href="#cb129-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">.pred_class =</span> <span class="fu">if_else</span>(.pred_FALSE <span class="sc">&gt;=</span> <span class="fl">0.5</span>, <span class="st">&quot;FALSE&quot;</span>, <span class="st">&quot;TRUE&quot;</span>),</span>
 <span id="cb129-5"><a href="#cb129-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">.pred_class =</span> <span class="fu">factor</span>(.pred_class, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;FALSE&quot;</span>, <span class="st">&quot;TRUE&quot;</span>))</span>

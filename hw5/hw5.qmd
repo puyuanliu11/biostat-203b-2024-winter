@@ -63,7 +63,7 @@ mimic_icu_cohort <- icu_cohort |>
          `White Blood Cells`, Bicarbonate,
          `Temperature Fahrenheit`, `Non Invasive Blood Pressure diastolic`, 
          `Respiratory Rate`, `Non Invasive Blood Pressure systolic`, 
-         `Heart Rate`)|>
+         `Heart Rate`) |>
   
   # Convert character and logical columns to factors
   mutate_if(is.character, as.factor) |>
@@ -87,7 +87,7 @@ set.seed(203)
 
 # sort
 mimiciv_icu_cohort <- mimic_icu_cohort |>
-  arrange(subject_id, hadm_id, stay_id)|>
+  arrange(subject_id, hadm_id, stay_id) |>
   select(-c(subject_id, hadm_id, stay_id))
 
 data_split <- initial_split(
@@ -561,7 +561,7 @@ boost_final_fit |>
 
 ```{r}
 # Convert prediction estimates to factor based on the chosen threshold
-stack_icu_pred <- stack_icu_pred %>%
+stack_icu_pred <- stack_icu_pred |>
   mutate(
     .pred_class = if_else(.pred_FALSE >= 0.5, "FALSE", "TRUE"),
     .pred_class = factor(.pred_class, levels = c("FALSE", "TRUE"))
