@@ -13,15 +13,13 @@ format:
     code-fold: false
 ---
 
-## Predicting ICU duration
+# Predicting ICU duration
 
-Using the ICU cohort `mimiciv_icu_cohort.rds` you built in Homework 4, develop at least three machine learning approaches (logistic regression with enet regularization, random forest, boosting, SVM, MLP, etc) plus a model stacking approach for predicting whether a patient's ICU stay will be longer than 2 days. 
-You should use the `los_long` variable as the outcome. 
-Your algorithms can use patient demographic information (gender, age at ICU `intime`, marital status, race), ICU admission information (first care unit), the last lab measurements before the ICU stay, and first vital measurements during ICU stay as features. You are welcome to use any feature engineering techniques you think are appropriate; but make sure to not use features that are not available at an ICU stay's `intime`. For instance, `last_careunit` cannot be used in your algorithms. 
+Using the ICU cohort `mimiciv_icu_cohort.rds` you built in Homework 4, develop at least three machine learning approaches (logistic regression with enet regularization, random forest, boosting, SVM, MLP, etc) plus a model stacking approach for predicting whether a patient's ICU stay will be longer than 2 days. You should use the `los_long` variable as the outcome. Your algorithms can use patient demographic information (gender, age at ICU `intime`, marital status, race), ICU admission information (first care unit), the last lab measurements before the ICU stay, and first vital measurements during ICU stay as features. You are welcome to use any feature engineering techniques you think are appropriate; but make sure to not use features that are not available at an ICU stay's `intime`. For instance, `last_careunit` cannot be used in your algorithms.
 
-1. Data preprocessing and feature engineering.
+## 1. Data preprocessing and feature engineering.
 
-```{r}
+```{r include=FALSE}
 library(tidyverse)
 library(readr)
 library(gtsummary)
@@ -81,8 +79,9 @@ mimic_icu_cohort <- icu_cohort |>
   print(width = Inf)
 ```
 
+## 2. Data partitioning
+Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
 
-2. Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
 ```{r}
 set.seed(203)
 
@@ -107,6 +106,7 @@ summary(mimiciv_icu_cohort)
 icu_train <- training(data_split)
 dim(icu_train)
 ```
+
 ```{r}
 icu_test <- testing(data_split)
 dim(icu_test)
@@ -117,8 +117,14 @@ data_split |>
   write_rds("data_split.rds", compress = "gz")
 ```
 
+## 3. Train and tune the models using the training set.
 
-3. Train and tune the models using the training set.
+```{r}
+# set up 3-fold cross-validation
+set.seed(203)
+folds <- vfold_cv(icu_train, v = 3)
+folds
+```
 
 ### Logistic regression with enet regularization
 
@@ -138,7 +144,6 @@ logit_recipe <-
   step_normalize(all_numeric_predictors()) 
 logit_recipe
 ```
-
 
 ```{r}
 # Models
@@ -170,13 +175,6 @@ logit_param_grid
 ```
 
 ```{r}
-set.seed(203)
-
-folds <- vfold_cv(icu_train, v = 3)
-folds
-```
-
-```{r}
 # Fit cross-validation (logistic)
 if (file.exists("logit_fit.rds")) {
   logit_fit <- read_rds("logit_fit.rds")
@@ -205,6 +203,7 @@ logit_fit |>
   labs(x = "Penalty", y = "CV AUC") +
   scale_x_log10()
 ```
+
 ```{r}
 logit_fit |>
   show_best("roc_auc")
@@ -240,7 +239,6 @@ logit_final_fit
 logit_final_fit |> 
   collect_metrics()
 ```
-
 
 ### Random forest
 
@@ -476,23 +474,6 @@ boost_final_fit |>
 ### Model stacking
 
 ```{r}
-stack_recipe <- 
-  recipe(
-    los_long ~ ., 
-    data = icu_train
-  ) |>
-  # mode imputation for categorical_var
-  step_impute_mode(all_nominal_predictors()) |>
-  # create traditional dummy variables (necessary for svm)
-  step_dummy(all_nominal_predictors()) |>
-  # zero-variance filter
-  step_zv(all_numeric_predictors()) |>
-  # center and scale numeric data
-  step_normalize(all_numeric_predictors()) 
-stack_recipe
-```
-
-```{r}
 # Model stacking
 if (!file.exists("icu_model_st.rds")) {
   icu_model_st <- 
@@ -533,6 +514,7 @@ autoplot(icu_model_st, type = "weights")
 # To identify which model configurations were assigned what stacking coefficients
 collect_parameters(icu_model_st, "rf_fit")
 ```
+
 ```{r}
 collect_parameters(icu_model_st, "logit_fit")
 ```
@@ -548,25 +530,34 @@ stack_icu_pred <- icu_test %>%
   print(width = Inf)
 ```
 
-4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
+## 4. Compare model classification performance on the test set.
+Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
 
 ```{r}
 # Test metrics for logistic regression model
 logit_final_fit |> 
   collect_metrics()
 ```
+**Interpretation:** Logistic Regression shows an AUC of 0.604 and an accuracy of 57.3%, its performance is relatively low. However, its simplicity makes it the most interpretable model, offering straightforward insights into how features affect predictions.
+
+AUC Score: measures a model's ability to distinguish between classes. A higher AUC indicates a model with a better performance in terms of sensitivity (true positive rate) and specificity (true negative rate).
+
+Accuracy: measures the proportion of true results (both true positives and true negatives) in the total dataset. It is a straightforward metric for overall performance but can be misleading if classes are imbalanced.
 
 ```{r}
 # Test metrics for random forest model
 rf_final_fit |> 
   collect_metrics()
 ```
+**Interpretation:** Random Forest shows an AUC of 0.629 and an accuracy of 59.2%, outperforming logistic regression. However, its complexity makes it less interpretable than logistic regression.
 
 ```{r}
 # Test metrics for boosting model
 boost_final_fit |> 
   collect_metrics()
 ```
+
+**Interpretation:** Boosting shows an AUC of 0.626 and an accuracy of 59%, performing better than logistic regression and slightly worse than random forest. It is also less interpretable due to its complexity.
 
 ```{r}
 # Convert prediction estimates to factor based on the chosen threshold
@@ -593,6 +584,7 @@ accuracy_value <- yardstick::accuracy(
 print(roc_auc_value)
 print(accuracy_value)
 ```
+**Interpretation:** The stacking model shows the best performance with an AUC of 0.634 and an accuracy of 59.4%, suggesting effective leveraging of the strengths of individual models, at the expense of interpretability.
 
 ```{r}
 # Extract important features for logistics regression model 
@@ -616,3 +608,13 @@ boost_features
 ```
 
 
+**Feature Importance for Predicting Long ICU Stays:**
+
+The most important features vary by indivual models. But based on the above importance plots, we can conclude that variables such as patient age, Non Invasive Blood Pressure systolic, Heart Rate, Hematocrit and White Blood cells are important. Individually, the most important feature for logistic regression is first care unit, for random forest is Non Invasive Blood Pressure systolic, and for boosting is age.
+
+
+**Comparison of Interpretability and complexity:**
+
+The stacking model performs the best in accuracy (0.594) and AUC (0.634) but lacks interpretability due to its complexity.
+
+Conversely, while logistic regression model is the most interpretable due to its simplicity and linearity, it has the lowest accuracy (0.573) and AUC (0.604). Random forest and XGBoost perform better logistic regression in terms of AUC and prediction accuracy but are less easy to interpret due to their complexity.
